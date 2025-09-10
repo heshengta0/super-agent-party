@@ -3,4 +3,7 @@
 :: 激活虚拟环境
 call .venv\Scripts\activate.bat
 
-start cmd /k "npm run dev"
+:: 直接运行 npm run dev 而不是在新窗口中
+npm run dev
+
+pause

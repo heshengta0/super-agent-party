@@ -1149,7 +1149,7 @@ let vue_data = {
       'Grok', 'mistral', 'lingyi','baichuan', 'qianfan', 'hunyuan', 'stepfun', 'Github', 
       'openrouter','together', 'fireworks', '360', 'Nvidia',
       'jina', 'gitee', 'perplexity', 'infini',
-      'modelscope', 'tencent'
+      'modelscope', 'tencent', 'BurnCloud'
     ],
     vendorLogoList: {
       'custom': 'source/providers/custom.png',
@@ -1187,7 +1187,8 @@ let vue_data = {
       'perplexity': 'source/providers/perplexity.png',
       'infini': 'source/providers/infini.png',
       'modelscope': 'source/providers/modelscope.png',
-      'tencent': 'source/providers/tencent-cloud-ti.png'
+      'tencent': 'source/providers/tencent-cloud-ti.png',
+      'BurnCloud': 'source/providers/burncloud.png'
     },
     vendorAPIpage: {
       'OpenAI': 'https://platform.openai.com/api-keys',
@@ -1224,7 +1225,8 @@ let vue_data = {
       'perplexity': 'https://www.perplexity.ai/settings/api',
       'infini': 'https://cloud.infini-ai.com/iam/secret/key',
       'modelscope': 'https://modelscope.cn/my/myaccesstoken',
-      'tencent': 'https://console.cloud.tencent.com/lkeap/api'
+      'tencent': 'https://console.cloud.tencent.com/lkeap/api',
+      'BurnCloud': 'https://ai.burncloud.com/'
     },
     newProviderTemp: {
       vendor: '',
