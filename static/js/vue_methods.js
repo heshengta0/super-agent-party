@@ -2236,6 +2236,7 @@ let vue_methods = {
         'Dify': this.isdocker ? 'http://host.docker.internal/v1' :'http://127.0.0.1/v1',
         'Gemini': 'https://generativelanguage.googleapis.com/v1beta/openai',
         'Anthropic': 'https://api.anthropic.com/v1',
+        'BurnCloud': 'https://ai.burncloud.com/v1',
         'Grok': 'https://api.groq.com/openai/v1',
         'mistral': 'https://api.mistral.ai/v1',
         'lingyi': 'https://api.lingyiwanwu.com/v1',
