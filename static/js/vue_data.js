@@ -70,7 +70,7 @@ let vue_data = {
     updateAvailable: false,
     updateInfo: null,
     updateIcon: 'fa-solid fa-download',
-    system_prompt: ' ',
+    system_prompt: '',
     isdocker: false,
     isExpanded: true,
     isElectron: isElectron,
@@ -439,6 +439,8 @@ let vue_data = {
       customTTSserver: "http://127.0.0.1:9880",
       customTTSspeaker: "",
       customTTSspeed: 1.0,
+      indexServer: "http://10.9.0.35:8001",
+      indexCharacter: "hayley",
       newtts:{}
     },
     activeTTSTab: 'default', // 控制 TTS 标签页切换
@@ -468,6 +470,8 @@ let vue_data = {
       customTTSserver: "http://127.0.0.1:9880",
       customTTSspeaker: "",
       customTTSspeed: 1.0,
+      indexServer: "http://10.9.0.35:8001",
+      indexCharacter: "hayley",
     },
     cur_voice :'default',
     openaiVoices:['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'],
@@ -924,6 +928,20 @@ let vue_data = {
     isVRMStarting: false,
     isVRMStopping: false,
     isVRMReloading: false,
+    // VRM 浮动窗口相关
+    showVrmFloatingWindow: false,
+    vrmWindowMinimized: false,
+    vrmWindowStyle: {
+      position: 'fixed',
+      right: '20px',
+      top: '50px', 
+      width: '400px',
+      height: '600px',
+      left: 'auto',
+      bottom: 'auto'
+    },
+    isDragging: false,
+    dragOffset: { x: 0, y: 0 },
     BotConfig: {
       imgHost_enabled: false,
       imgHost: 'smms',

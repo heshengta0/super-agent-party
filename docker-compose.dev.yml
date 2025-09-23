@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  super-agent-party-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: super-agent-party-dev
+    ports:
+      - "3456:3456"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3456
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1  # 防止生成 .pyc 文件
+    volumes:
+      # 完全掛載整個專案目錄
+      - .:/app
+      # 數據持久化
+      - ./data:/root/.local/share/Super-Agent-Party
+      # 上傳文件目錄
+      - ./uploaded_files:/app/uploaded_files
+      # 排除容器內的虛擬環境和 node_modules
+      - /app/node_modules
+      - /app/.venv
+    restart: unless-stopped
+    command: ["python", "server.py", "--host", "0.0.0.0", "--port", "3456"]
+    networks:
+      - super-agent-network
+    # 開發模式下的額外配置
+    stdin_open: true
+    tty: true
+
+networks:
+  super-agent-network:
+    driver: bridge

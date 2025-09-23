@@ -16,12 +16,16 @@ const isElectron = typeof require !== 'undefined' || navigator.userAgent.include
 // 根据环境添加 class
 document.body.classList.add(isElectron ? 'electron' : 'web');
 
-// 优化渲染器设置
-const renderer = new THREE.WebGLRenderer();
+// 优化渲染器设置 - 启用透明背景
+const renderer = new THREE.WebGLRenderer({ 
+  alpha: true, 
+  antialias: true,
+  preserveDrawingBuffer: true 
+});
 // 添加性能优化设置
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.max(1, window.devicePixelRatio));
-renderer.setClearColor(0x00000000, 0);
+renderer.setClearColor(0x000000, 0); // 完全透明背景
 
 // 用fetch查询/cur_language的值
 async function fetchLanguage() {

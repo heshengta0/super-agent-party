@@ -1,0 +1,15 @@
+services:
+  super-agent-party:
+    build: .
+    ports:
+      - "3456:3456"
+    volumes:
+      # 掛載整個專案目錄，實現即時代碼同步
+      - .:/app
+      # 保留 node_modules 在容器內，避免本地和容器版本衝突
+      - /app/node_modules
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3456
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

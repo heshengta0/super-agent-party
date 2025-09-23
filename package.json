@@ -5,8 +5,8 @@
   "main": "main.js",
   "asar": false,
   "scripts": {
-    "start": "cross-env NODE_ENV=production electron .",
-    "dev": "cross-env NODE_ENV=development electron .",
+    "start": "cross-env NODE_ENV=production electron . --no-sandbox",
+    "dev": "cross-env NODE_ENV=development electron . --no-sandbox",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "electron-builder -mwl",
     "build:win": "electron-builder -w",

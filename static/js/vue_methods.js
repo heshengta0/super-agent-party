@@ -122,7 +122,7 @@ let vue_methods = {
   },
   async resetMessage(index) {
     this.messages[index].content = " ";
-    this.system_prompt = " ";
+    // 不要重置系統提示詞，保持用戶設定的值
     await this.autoSaveSettings();
   },
 
@@ -351,8 +351,8 @@ let vue_methods = {
         this.system_prompt = conversation.system_prompt;
       }
       else {
-        this.system_prompt = " ";
-        this.messages = [{ role: 'system', content: this.system_prompt }];
+        // 當沒有對話時，保留當前的系統提示詞，不要重置為空格
+        this.messages = [{ role: 'system', content: this.system_prompt || '' }];
       }
       this.scrollToBottom();
       await this.autoSaveSettings();
@@ -902,7 +902,11 @@ let vue_methods = {
     changeMainAgent(agent) {
       this.mainAgent = agent;
       if (agent === 'super-model') {
-        this.system_prompt = " "
+        // 如果當前沒有系統提示詞或只是空格，則保持空，否則保留用戶設定
+        if (!this.system_prompt || this.system_prompt.trim() === '') {
+          this.system_prompt = "";
+        }
+        // 如果已有系統提示詞，則保留不變
       }
       else {
         this.system_prompt = this.agents[agent].system_prompt;
@@ -994,7 +998,17 @@ let vue_methods = {
             extra_params: data.data.extra_params || [],
           };
           this.isBtnCollapse = data.data.isBtnCollapse || false;
-          this.system_prompt = data.data.system_prompt || '';
+          // 只有當後端明確提供了非空白的系統提示詞時才更新，否則保留用戶當前的設定
+          if (data.data.system_prompt !== undefined && 
+              data.data.system_prompt !== null && 
+              data.data.system_prompt.trim() !== '') {
+            this.system_prompt = data.data.system_prompt;
+          }
+          // 如果當前 system_prompt 是空白，且後端提供的也是空白，則確保為空字符串
+          if ((!this.system_prompt || this.system_prompt.trim() === '') && 
+              (!data.data.system_prompt || data.data.system_prompt.trim() === '')) {
+            this.system_prompt = '';
+          }
           this.conversations = data.data.conversations || this.conversations;
           this.conversationId = data.data.conversationId || this.conversationId;
           this.agents = data.data.agents || this.agents;
@@ -1823,7 +1837,8 @@ let vue_methods = {
     },
     async clearMessages() {
       this.stopGenerate();
-      this.messages = [{ role: 'system', content: this.system_prompt }];
+      // 保留用戶設定的系統提示詞，不要重置
+      this.messages = [{ role: 'system', content: this.system_prompt || '' }];
       this.conversationId = null;
       this.fileLinks = [];
       this.isThinkOpen = false; // 重置思考模式状态
@@ -5466,8 +5481,24 @@ let vue_methods = {
         this.isVRMStarting = false;
       }
     } else {
-      // 浏览器环境
-      window.open(`${this.partyURL}/vrm.html`, '_blank');
+      // 瀏覽器環境 - 切換浮動視窗顯示/隱藏
+      if (this.showVrmFloatingWindow) {
+        this.closeVrmWindow();
+      } else {
+        this.showVrmFloatingWindow = true;
+        this.vrmWindowMinimized = false;
+        // 設置視窗初始位置和大小 - 使用右邊定位
+        this.vrmWindowStyle = {
+          position: 'fixed',
+          right: '20px',  // 初始位置在右側
+          top: '50px',   // 初始位置在上方
+          width: this.VRMConfig.windowWidth + 'px',
+          height: this.VRMConfig.windowHeight + 'px',
+          left: 'auto',
+          bottom: 'auto'
+        };
+        console.log('VRM視窗樣式設定:', this.vrmWindowStyle);
+      }
     }
   },
   async startVRMweb() {
@@ -5477,6 +5508,127 @@ let vue_methods = {
       // 浏览器环境
       window.open(`${this.partyURL}/vrm.html`, '_blank');
     }
+  },
+  // VRM 浮动窗口控制方法
+  closeVrmWindow() {
+    this.showVrmFloatingWindow = false;
+    this.vrmWindowMinimized = false;
+  },
+  minimizeVrmWindow() {
+    this.vrmWindowMinimized = !this.vrmWindowMinimized;
+    // 當最小化時，將窗口移到右下角
+    if (this.vrmWindowMinimized) {
+      this.vrmWindowStyle.bottom = '20px';
+      this.vrmWindowStyle.right = '20px';
+      this.vrmWindowStyle.top = 'auto';
+      this.vrmWindowStyle.left = 'auto';
+      this.vrmWindowStyle.width = '150px';
+      this.vrmWindowStyle.height = '100px';
+    } else {
+      // 還原到正常大小和位置
+      this.vrmWindowStyle.width = this.VRMConfig.windowWidth + 'px';
+      this.vrmWindowStyle.height = this.VRMConfig.windowHeight + 'px';
+      this.vrmWindowStyle.bottom = 'auto';
+      // 如果之前沒有設置過left和top（即從未拖移過），則使用默認右邊位置
+      if (!this.vrmWindowStyle.left || this.vrmWindowStyle.left === 'auto') {
+        this.vrmWindowStyle.top = '50px';
+        this.vrmWindowStyle.right = '20px';
+        this.vrmWindowStyle.left = 'auto';
+      }
+    }
+  },
+  // 拖拽功能 - 拖移整個VRM視窗位置
+  startDrag(e) {
+    console.log('開始拖移VRM視窗');
+    // 最小化狀態下不允許拖拽
+    if (this.vrmWindowMinimized) {
+      console.log('視窗已最小化，無法拖移');
+      return;
+    }
+    
+    this.isDragging = true;
+    
+    // 獲取當前視窗的實際位置
+    const vrmWindow = this.$refs.vrmWindow;
+    if (!vrmWindow) {
+      console.log('找不到VRM視窗元素');
+      return;
+    }
+    
+    const rect = vrmWindow.getBoundingClientRect();
+    console.log('視窗當前位置:', rect);
+    
+    if (e.type === 'mousedown') {
+      // 計算滑鼠相對於視窗左上角的偏移
+      this.dragOffset.x = e.clientX - rect.left;
+      this.dragOffset.y = e.clientY - rect.top;
+      
+      document.addEventListener('mousemove', this.drag);
+      document.addEventListener('mouseup', this.stopDrag);
+    } else if (e.type === 'touchstart') {
+      const touch = e.touches[0];
+      this.dragOffset.x = touch.clientX - rect.left;
+      this.dragOffset.y = touch.clientY - rect.top;
+      
+      document.addEventListener('touchmove', this.drag, { passive: false });
+      document.addEventListener('touchend', this.stopDrag);
+    }
+    
+    console.log('拖移偏移量:', this.dragOffset);
+    e.preventDefault();
+    e.stopPropagation();
+  },
+  
+  drag(e) {
+    if (!this.isDragging || this.vrmWindowMinimized) return;
+    
+    let clientX, clientY;
+    if (e.type === 'mousemove') {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else if (e.type === 'touchmove') {
+      const touch = e.touches[0];
+      clientX = touch.clientX;
+      clientY = touch.clientY;
+    }
+    
+    // 計算新的視窗位置
+    const newX = clientX - this.dragOffset.x;
+    const newY = clientY - this.dragOffset.y;
+    
+    // 獲取視窗尺寸和螢幕邊界
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const vrmWidth = parseInt(this.vrmWindowStyle.width) || 400;
+    const vrmHeight = parseInt(this.vrmWindowStyle.height) || 600;
+    
+    // 設置邊界限制，確保視窗不會完全拖出螢幕
+    const minX = -vrmWidth + 100; // 至少保留100px在螢幕內
+    const minY = 0;
+    const maxX = windowWidth - 100;
+    const maxY = windowHeight - 100;
+    
+    // 更新視窗位置
+    const finalX = Math.max(minX, Math.min(maxX, newX));
+    const finalY = Math.max(minY, Math.min(maxY, newY));
+    
+    // 更新視窗位置樣式
+    this.vrmWindowStyle.left = finalX + 'px';
+    this.vrmWindowStyle.top = finalY + 'px';
+    this.vrmWindowStyle.right = 'auto';
+    this.vrmWindowStyle.bottom = 'auto';
+    
+    e.preventDefault();
+    e.stopPropagation();
+  },
+  
+  stopDrag() {
+    console.log('停止拖移VRM視窗');
+    this.isDragging = false;
+    document.removeEventListener('mousemove', this.drag);
+    document.removeEventListener('mouseup', this.stopDrag);
+    document.removeEventListener('touchmove', this.drag);
+    document.removeEventListener('touchend', this.stopDrag);
   },
     async checkServerPort() {
       try {

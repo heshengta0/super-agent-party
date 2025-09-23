@@ -276,9 +276,12 @@ if ('serviceWorker' in navigator) {
                 </div>
                 <!-- AI回复内容 -->
                 <div v-else-if="message.role === 'assistant'"  class="markdown-body" v-html="message.briefly ? formatMessage(message.pure_content??msg.content) : formatMessage(message.content)"></div>
-                <!-- 系统消息内容 -->
-                <div v-else class="user-message-content" data-mjx-disabled="true">
-                  <div v-html="t('system_prompt') + message.content" @click="openEditDialog(message.role, message.content,index)"></div>
+                <!-- 系统消息内容 - 默认隐藏 -->
+                <div v-else class="user-message-content system-message-content" data-mjx-disabled="true" style="display: none;">
+                  <div class="system-message-wrapper" @click="openEditDialog(message.role, message.content,index)">
+                    <i class="fa-solid fa-gear system-icon" :title="t('system_prompt')"></i>
+                    <span class="system-content">{{ message.content }}</span>
+                  </div>
                 </div>
               </div>
               <!-- 添加复制按钮 -->
@@ -449,6 +452,24 @@ if ('serviceWorker' in navigator) {
                   </el-option>
                 </el-select>
               </div>
+              
+              <!-- 系统提示词设置 -->
+              <div class="agent-section">
+                <h3>{{ t('system_prompt') }}</h3>
+                <el-input
+                  v-model="system_prompt"
+                  type="textarea"
+                  :placeholder="t('systemPromptPlaceholder')"
+                  :rows="4"
+                  @input="syncSystemPromptToMessages"
+                  class="system-prompt-input"
+                />
+                <div class="system-prompt-tips">
+                  <i class="fa-solid fa-info-circle"></i>
+                  {{ t('systemPromptTips') }}
+                </div>
+              </div>
+              
               <!-- 工具智能体选择 -->
               <div class="agent-section">
                 <h3>{{ t('toolAgents') }}</h3>
@@ -979,14 +1000,15 @@ if ('serviceWorker' in navigator) {
               </el-button>
             </el-tooltip>
 
-            <el-tooltip :content="t('tablePet')" placement="top">
+            <el-tooltip :content="showVrmFloatingWindow ? t('hideVrmWindow') || '隐藏VRM窗口' : t('showVrmWindow') || '显示VRM窗口'" placement="top">
               <el-button
                 @click="startVRM"
                 class="icon-btn vrm-btn"
-                :type="'default'"
+                :class="{ 'vrm-active': showVrmFloatingWindow }"
+                :type="showVrmFloatingWindow ? 'success' : 'default'"
                 v-if="!isBtnCollapse"
                 circle>
-                <i :class='isVRMStarting? "fa-solid fa-spinner fa-spin" : "fa-solid fa-user-ninja"'></i>
+                <i :class='isVRMStarting? "fa-solid fa-spinner fa-spin" : (showVrmFloatingWindow ? "fa-solid fa-eye" : "fa-solid fa-user-ninja")'></i>
               </el-button>
             </el-tooltip>
 
@@ -2054,6 +2076,7 @@ if ('serviceWorker' in navigator) {
                               <el-option label="GPT Sovits" value="GSV" ></el-option>
                               <el-option :label="t('openaiLike')" value="openai" ></el-option>
                               <el-option :label="t('customTTS')" value="customTTS" ></el-option>
+                              <el-option label="Index TTS" value="index" ></el-option>
                             </el-select>
                           </el-form-item>
                           <el-form-item :label="t('separators')">
@@ -2259,6 +2282,37 @@ if ('serviceWorker' in navigator) {
                               :max="2"
                               :step="0.1"
                               @change="autoSaveSettings">
+                          </el-form-item>
+                        </div>
+                      </div>
+
+                      <div class="tool-item" v-show="ttsSettings.engine === 'index'">
+                        <div class="tool-header">
+                          <div class="header-left">
+                            <span>
+                              <el-icon>
+                                <i class="fa-solid fa-volume-high"></i>
+                              </el-icon>
+                              Index TTS
+                            </span>
+                          </div>
+                        </div>
+                        <div class="tool-content">
+                          <el-form-item :label="t('customTTSserver')" class="form-item-align">
+                            <el-input
+                              v-model="ttsSettings.indexServer"
+                              placeholder="http://10.9.0.35:8001"
+                              @input="autoSaveSettings"
+                              class="full-width-input"
+                            />
+                          </el-form-item>
+                          <el-form-item :label="t('customTTSspeaker')" class="form-item-align">
+                            <el-input
+                              v-model="ttsSettings.indexCharacter"
+                              placeholder="hayley"
+                              @input="autoSaveSettings"
+                              class="full-width-input"
+                            />
                           </el-form-item>
                         </div>
                       </div>
@@ -2560,6 +2614,7 @@ if ('serviceWorker' in navigator) {
                         <el-option label="GPT Sovits" value="GSV"></el-option>
                         <el-option :label="t('openaiLike')" value="openai"></el-option>
                         <el-option :label="t('customTTS')" value="customTTS"></el-option>
+                        <el-option label="Index TTS" value="index"></el-option>
                       </el-select>
                     </el-form-item>
 
@@ -2721,6 +2776,37 @@ if ('serviceWorker' in navigator) {
                             :max="2"
                             :step="0.1"
                             @change="autoSaveSettings">
+                        </el-form-item>
+                      </div>
+                    </div>
+
+                    <div class="tool-item" v-show="newTTSConfig.engine === 'index'">
+                      <div class="tool-header">
+                        <div class="header-left">
+                          <span>
+                            <el-icon>
+                              <i class="fa-solid fa-volume-high"></i>
+                            </el-icon>
+                            Index TTS
+                          </span>
+                        </div>
+                      </div>
+                      <div class="tool-content">
+                        <el-form-item :label="t('customTTSserver')" class="form-item-align">
+                          <el-input
+                            v-model="newTTSConfig.indexServer"
+                            placeholder="http://10.9.0.35:8001"
+                            @input="autoSaveSettings"
+                            class="full-width-input"
+                          />
+                        </el-form-item>
+                        <el-form-item :label="t('customTTSspeaker')" class="form-item-align">
+                          <el-input
+                            v-model="newTTSConfig.indexCharacter"
+                            placeholder="hayley"
+                            @input="autoSaveSettings"
+                            class="full-width-input"
+                          />
                         </el-form-item>
                       </div>
                     </div>
@@ -7152,13 +7238,61 @@ if ('serviceWorker' in navigator) {
         </div>
       </el-main>
     </el-container>
+
+    <!-- VRM 浮动窗口 -->
+    <div 
+      v-if="showVrmFloatingWindow" 
+      id="vrmFloatingWindow" 
+      class="vrm-floating-window"
+      :style="vrmWindowStyle"
+      ref="vrmWindow">
+      
+      <!-- VRM 浮动控制按钮 -->
+      <div class="vrm-control-buttons">
+        <!-- 拖移按钮 -->
+        <div 
+          class="vrm-control-btn drag-btn"
+          @mousedown="startDrag"
+          @touchstart="startDrag"
+          :title="t('dragWindow') || '拖移視窗'"
+        >
+          <i class="fa-solid fa-arrows-up-down-left-right"></i>
+        </div>
+        
+        <!-- 最小化按钮 -->
+        <div 
+          class="vrm-control-btn minimize-btn"
+          @click="minimizeVrmWindow"
+          :title="vrmWindowMinimized ? (t('restoreWindow') || '還原視窗') : (t('minimizeWindow') || '最小化視窗')"
+        >
+          <i :class="vrmWindowMinimized ? 'fa-solid fa-window-restore' : 'fa-solid fa-window-minimize'"></i>
+        </div>
+        
+        <!-- 關閉按钮 -->
+        <div 
+          class="vrm-control-btn close-btn"
+          @click="closeVrmWindow"
+          :title="t('closeWindow') || '關閉視窗'"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </div>
+      </div>
+      
+      <iframe 
+        v-if="!vrmWindowMinimized"
+        :src="`${partyURL}/vrm.html`" 
+        id="vrmIframe" 
+        class="vrm-iframe"
+        frameborder="0">
+      </iframe>
+    </div>
   </div>
   <!-- 引入Vue和Element Plus -->
   <script src="node_modules/vue/dist/vue.global.js"></script>
   <script src="node_modules/element-plus/dist/index.full.js"></script>
   <script src="node_modules/@element-plus/icons-vue/dist/index.iife.min.js"></script>
-  <script src="js/vue_data.js"></script>
-  <script src="js/vue_methods.js"></script>
+  <script src="js/vue_data.js?v=20250908"></script>
+  <script src="js/vue_methods.js?v=20250908"></script>
   <script src="js/renderer.js"></script>
 </body>
 </html>

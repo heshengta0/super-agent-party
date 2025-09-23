@@ -27,6 +27,11 @@ import asyncio
 import copy
 from functools import partial
 import json
+try:
+    import opencc
+except ImportError:
+    print("Warning: opencc not installed. Please install it with: pip install opencc-python-reimplemented")
+    opencc = None
 import re
 import shutil
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, Request, WebSocketDisconnect
@@ -4340,6 +4345,73 @@ async def text_to_speech(request: Request):
                 media_type="audio/mpeg",
                 headers={
                     "Content-Disposition": f"inline; filename=tts_{index}.mp3",
+                    "X-Audio-Index": str(index)
+                }
+            )
+        elif tts_engine == 'index':
+            # Index TTS 處理邏輯
+            index_config = {
+                'server_url': tts_settings.get('indexServer', 'http://10.9.0.35:8001'),
+                'character': tts_settings.get('indexCharacter', 'hayley')
+            }
+            
+            print(f"Using Index TTS with server: {index_config['server_url']}, character: {index_config['character']}")
+            
+            async def generate_audio():
+                try:
+                    # 轉換文字為簡體中文
+                    processed_text = text
+                    if opencc:
+                        try:
+                            cc = opencc.OpenCC('t2s')  # 繁體轉簡體
+                            processed_text = cc.convert(text)
+                            print(f"Text converted from: {text} to: {processed_text}")
+                        except Exception as e:
+                            print(f"OpenCC conversion failed, using original text: {e}")
+                            processed_text = text
+                    else:
+                        print("OpenCC not available, using original text")
+                    
+                    # 構建請求參數
+                    index_params = {
+                        "text": processed_text,
+                        "character": index_config['character']
+                    }
+                    
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        try:
+                            # 發送 POST 請求到 Index TTS 服務
+                            response = await client.post(
+                                f"{index_config['server_url']}/tts",
+                                json=index_params
+                            )
+                            response.raise_for_status()
+                            
+                            # 獲取音頻內容並分塊返回
+                            content = response.content
+                            chunk_size = 4096  # 4KB chunks
+                            for i in range(0, len(content), chunk_size):
+                                yield content[i:i + chunk_size]
+                                await asyncio.sleep(0)  # Allow other tasks to run
+                                
+                        except httpx.RequestError as e:
+                            print(f"Index TTS 請求失敗: {e}")
+                            raise HTTPException(status_code=502, detail=f"Index TTS 連接失敗: {str(e)}")
+                        except httpx.HTTPStatusError as e:
+                            error_detail = f"Index TTS 服務錯誤: {e.response.status_code} - {e.response.text}"
+                            print(error_detail)
+                            raise HTTPException(status_code=502, detail=error_detail)
+                            
+                except Exception as e:
+                    print(f"Index TTS error: {str(e)}")
+                    raise HTTPException(status_code=500, detail=f"Index TTS錯誤: {str(e)}")
+            
+            # 返回流式響應
+            return StreamingResponse(
+                generate_audio(),
+                media_type="audio/wav",  # 根據您的API返回格式調整
+                headers={
+                    "Content-Disposition": f"inline; filename=tts_{index}.wav",
                     "X-Audio-Index": str(index)
                 }
             )

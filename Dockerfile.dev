@@ -1,0 +1,28 @@
+# 開發環境專用 Dockerfile
+FROM python:3.12-slim
+
+# 安装Node.js和開發工具
+RUN apt-get update && \
+    apt-get install -y gcc curl git vim && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \ 
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /app
+
+# 创建必要的目录
+RUN mkdir -p uploaded_files data
+
+# 設置 Python 環境變量
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+# 暴露端口
+EXPOSE 3456
+
+# 開發模式：直接使用掛載的代碼，不預先安裝依賴
+# 依賴會在容器啟動時通過掛載的 requirements.txt 安裝
+CMD ["sh", "-c", "pip install -r requirements.txt && python server.py --host 0.0.0.0 --port 3456"]

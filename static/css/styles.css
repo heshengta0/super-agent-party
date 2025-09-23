@@ -1093,6 +1093,79 @@ body {
   padding: 5px;
 }
 
+/* 系統訊息樣式優化 */
+.system-message-content {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.system-message-content:hover {
+  opacity: 1;
+}
+
+.system-message-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--el-bg-color-page);
+  border: 1px dashed var(--el-border-color-light);
+  transition: all 0.2s ease;
+}
+
+.system-message-wrapper:hover {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+.system-icon {
+  color: var(--el-color-info);
+  font-size: 12px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.system-content {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 系统提示词输入框样式 */
+.system-prompt-input {
+  margin-bottom: 10px;
+}
+
+.system-prompt-tips {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.system-prompt-tips i {
+  color: var(--primary-color);
+}
+
+/* Agent 设置对话框样式增强 */
+.agent-section {
+  margin-bottom: 20px;
+}
+
+.agent-section h3 {
+  margin-bottom: 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .assistant .message-content {
   background-color: var(--el-bg-color-page);
   border: 1px solid var(--el-border-color-light);
@@ -3218,4 +3291,194 @@ body {
 .batch-del-btn:disabled {
   box-shadow: none;
   transform: none;
+}
+
+/* VRM 浮动窗口样式 - 极简透明版 */
+.vrm-floating-window {
+  position: fixed;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  z-index: 9999;
+  overflow: visible;
+  min-width: 300px;
+  min-height: 200px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.vrm-window-header {
+  display: none; /* 完全隐藏标题栏 */
+}
+
+.vrm-window-controls {
+  display: none; /* 隐藏原有控制按钮 */
+}
+
+.vrm-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.vrm-floating-window.minimized {
+  opacity: 0.2;
+  transform: scale(0.3);
+  pointer-events: none;
+}
+
+.vrm-floating-window.minimized .vrm-iframe {
+  pointer-events: none;
+}
+
+/* 独立的浮动控制按钮 */
+.vrm-control-buttons {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10001;
+}
+
+.vrm-control-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(15px);
+  font-size: 14px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+
+.vrm-control-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.vrm-control-btn:active {
+  transform: scale(1.05);
+}
+
+/* 拖移按鈕特殊樣式 */
+.vrm-control-btn.drag-btn {
+  cursor: move;
+}
+
+.vrm-control-btn.drag-btn:hover {
+  background: rgba(34, 197, 94, 0.8);
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+/* 關閉按鈕特殊樣式 */
+.vrm-control-btn.close-btn:hover {
+  background: rgba(239, 68, 68, 0.8);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+/* 最小化按鈕特殊樣式 */
+.vrm-control-btn.minimize-btn:hover {
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+/* 亮色主題下的控制按鈕 */
+[data-theme="light"] .vrm-control-btn {
+  background: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .vrm-control-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .vrm-control-btn.drag-btn:hover {
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+[data-theme="light"] .vrm-control-btn.close-btn:hover {
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+[data-theme="light"] .vrm-control-btn.minimize-btn:hover {
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+  .vrm-floating-window {
+    width: 90% !important;
+    height: 60% !important;
+    top: 20% !important;
+    left: 5% !important;
+  }
+  
+  .vrm-control-buttons {
+    top: 5px;
+    right: 5px;
+    gap: 8px;
+  }
+  
+  .vrm-control-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .vrm-floating-window {
+    width: 90% !important;
+    height: 60% !important;
+    top: 20% !important;
+    left: 5% !important;
+  }
+}
+
+/* VRM按钮增强样式 */
+.vrm-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.vrm-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: var(--el-color-success);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.vrm-btn.vrm-active::after {
+  opacity: 1;
 }

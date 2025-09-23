@@ -215,6 +215,7 @@ const translations = {
         'agentNamePlaceholder': '请输入智能体名称',
         'systemPrompt': '系统提示词',
         'systemPromptPlaceholder': '请输入系统提示词',
+        'systemPromptTips': '系统提示词用于设置AI的行为模式和回答风格，对话时不会显示给用户',
         'createAgent': '创建智能体',
         'copyAgentId': '复制智能体ID',
         'editAgent': '编辑智能体',
@@ -1443,6 +1444,7 @@ key3`,
 {{User}}: Hello
 {{char}}: Hello`,
         'systemPromptPlaceholder':'Please enter the system prompt ',
+        'systemPromptTips': 'System prompts set AI behavior and response style, hidden from users during conversations',
         'Character Book':'Character Book ',
         'KeysPlaceholder':`key1
 Key2
