@@ -355,6 +355,7 @@ brave_tool = {
 
 from langchain_exa import ExaSearchResults
 async def Exa_search_async(query):
+    """Search using Exa - the fastest and most accurate web search API for AI."""
     settings = await load_settings()
     def sync_search():
         max_results = settings['webSearch']['exa_max_results'] or 10
