@@ -187,6 +187,12 @@ const ALL_ALLOWED_EXTENSIONS = [...new Set([
 ])];
 
 let vue_methods = {
+  stringifyEntityId(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    return String(value);
+  },
   handleUpdateAction() {
     if (this.updateDownloaded) {
       window.electronAPI.quitAndInstall();
@@ -241,6 +247,7 @@ let vue_methods = {
             id: this.conversationId,
             title: this.generateConversationTitle(messagesPayload),
             mainAgent: this.mainAgent,
+            groupId: this.draftConversationGroupId || 'default',
             timestamp: Date.now(),
             messages: this.messages,
             fileLinks: this.fileLinks,
@@ -253,6 +260,7 @@ let vue_methods = {
             conv.messages = this.messages;
             conv.timestamp = Date.now();
             conv.fileLinks = this.fileLinks;
+            conv.groupId = conv.groupId || this.draftConversationGroupId || 'default';
         }
     }
     await this.autoSaveSettings();
@@ -514,13 +522,305 @@ let vue_methods = {
       
       return this.t('newChat');
     },
+    openDeleteConversationDialog(conversation) {
+      if (!conversation?.id) return;
+      this.deleteConversationForm = {
+        id: conversation.id,
+        title: conversation.title || this.t('untitled'),
+        deleteMemory: false,
+      };
+      this.showDeleteConversationDialog = true;
+    },
     async confirmDeleteConversation(convId) {
-      if (convId === this.conversationId) {
-        this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+      const conversation = this.conversations.find(c => c.id === convId);
+      if (!conversation) return;
+      this.openDeleteConversationDialog(conversation);
+    },
+    ensureConversationGroups() {
+      const defaultGroup = {
+        id: 'default',
+        name: this.t('defaultConversationGroup'),
+        createdAt: 0,
+        memoryConfig: {}
+      };
+
+      const rawGroups = Array.isArray(this.conversationGroups) ? this.conversationGroups : [];
+      const groups = rawGroups
+        .filter(group => group && group.id && group.id !== 'default')
+        .map(group => ({
+          ...group,
+          memoryConfig: group.memoryConfig || {}
+        }));
+
+      this.conversationGroups = [defaultGroup, ...groups];
+      this.conversations = (Array.isArray(this.conversations) ? this.conversations : []).map(conv => ({
+        ...conv,
+        groupId: conv.groupId || 'default'
+      }));
+
+      if (!this.conversationGroups.some(group => group.id === this.draftConversationGroupId)) {
+        this.draftConversationGroupId = 'default';
       }
-      
-      this.conversations = this.conversations.filter(c => c.id !== convId);
-      await this.saveConversations(); // 保存对话列表
+      if (!this.conversationGroups.some(group => group.id === this.activeConversationGroupId)) {
+        this.activeConversationGroupId = this.draftConversationGroupId || 'default';
+      }
+    },
+    setActiveConversationGroup(groupId = 'default') {
+      this.ensureConversationGroups();
+      const nextGroupId = this.conversationGroups.some(group => group.id === groupId) ? groupId : 'default';
+      this.activeConversationGroupId = nextGroupId;
+      this.draftConversationGroupId = nextGroupId;
+    },
+    createConversationGroup() {
+      this.conversationGroupDialogMode = 'create';
+      this.conversationGroupForm = {
+        id: null,
+        name: '',
+        memoryEnabled: false,
+      };
+      this.showConversationGroupDialog = true;
+    },
+    openRenameConversationGroupDialog(group) {
+      if (!group?.id || group.id === 'default') return;
+      this.conversationGroupDialogMode = 'rename';
+      this.conversationGroupForm = {
+        id: group.id,
+        name: group.name || '',
+        memoryEnabled: !!group.memoryConfig?.enabled,
+      };
+      this.showConversationGroupDialog = true;
+    },
+    async submitConversationGroupDialog() {
+      this.ensureConversationGroups();
+      const name = String(this.conversationGroupForm?.name || '').trim();
+      if (!name) {
+        showNotification(this.t('groupNameRequired'), 'error');
+        return;
+      }
+
+      const currentGroupId = this.conversationGroupForm?.id || null;
+      const exists = this.conversationGroups.some(group =>
+        group.id !== currentGroupId && (group.name || '').trim() === name
+      );
+      if (exists) {
+        showNotification(this.t('groupNameExists'), 'error');
+        return;
+      }
+
+      if (this.conversationGroupDialogMode === 'rename' && currentGroupId) {
+        const targetGroup = this.conversationGroups.find(group => group.id === currentGroupId);
+        if (!targetGroup) return;
+        targetGroup.name = name;
+        targetGroup.memoryConfig = {
+          ...(targetGroup.memoryConfig || {}),
+          enabled: !!this.conversationGroupForm?.memoryEnabled,
+        };
+        await this.saveConversations();
+        this.showConversationGroupDialog = false;
+        showNotification(this.t('groupRenamed'), 'success');
+        return;
+      }
+
+      const newGroup = {
+        id: uuid.v4(),
+        name,
+        createdAt: Date.now(),
+        memoryConfig: {
+          enabled: !!this.conversationGroupForm?.memoryEnabled,
+        }
+      };
+
+      this.conversationGroups.push(newGroup);
+      this.draftConversationGroupId = newGroup.id;
+      this.activeConversationGroupId = newGroup.id;
+      await this.saveConversations();
+      this.showConversationGroupDialog = false;
+      showNotification(this.t('groupCreated'), 'success');
+    },
+    async startConversationInGroup(groupId = null) {
+      this.ensureConversationGroups();
+      const targetGroupId = groupId || this.activeConversationGroupId || this.draftConversationGroupId || 'default';
+      this.setActiveConversationGroup(targetGroupId);
+      await this.clearMessages();
+    },
+    async moveConversationToGroup(convId, groupId) {
+      this.ensureConversationGroups();
+      const targetGroupId = groupId || 'default';
+      const conversation = this.conversations.find(conv => conv.id === convId);
+      if (!conversation) return;
+
+      conversation.groupId = targetGroupId;
+      if (convId === this.conversationId) {
+        this.draftConversationGroupId = targetGroupId;
+        this.activeConversationGroupId = targetGroupId;
+      }
+      await this.saveConversations();
+    },
+    openDeleteGroupDialog(group) {
+      if (!group?.id || group.id === 'default') return;
+      this.deleteGroupForm = {
+        id: group.id,
+        name: group.name || '',
+        conversationCount: this.conversations.filter(conv => (conv.groupId || 'default') === group.id).length,
+      };
+      this.showDeleteGroupDialog = true;
+    },
+    getDeleteGroupWarningText() {
+      const count = this.deleteGroupForm?.conversationCount || 0;
+      return String(this.t('deleteGroupWillDeleteChats')).replace('{count}', count);
+    },
+    async deleteConversationById(conversationId, options = {}) {
+      const response = await fetch('/api/conversations/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: this.stringifyEntityId(conversationId),
+          delete_memory: !!options.deleteMemory,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('delete_failed');
+      }
+
+      if (conversationId === this.conversationId) {
+        this.conversationId = null;
+        this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+        this.fileLinks = [];
+      }
+
+      this.conversations = this.conversations.filter(c => c.id !== conversationId);
+    },
+    async clearAllHistoryRecords() {
+      try {
+        await this.$confirm(this.t('confirmClearAllHistory'), this.t('warning'), {
+          confirmButtonText: this.t('confirm'),
+          cancelButtonText: this.t('cancel'),
+          type: 'warning'
+        });
+
+        const conversationIds = this.conversations.map(conv => conv.id);
+        for (const conversationId of conversationIds) {
+          await this.deleteConversationById(conversationId, {
+            deleteMemory: true,
+          });
+        }
+
+        this.conversationId = null;
+        this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+        this.fileLinks = [];
+        await this.saveConversations();
+      } catch (error) {
+        if (error?.message === 'delete_failed') {
+          showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+        }
+      }
+    },
+    async pruneHistoryToLastWeek() {
+      try {
+        await this.$confirm(this.t('confirmKeepLastWeek'), this.t('warning'), {
+          confirmButtonText: this.t('confirm'),
+          cancelButtonText: this.t('cancel'),
+          type: 'warning'
+        });
+
+        const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const expiredConversationIds = this.conversations
+          .filter(conv => !conv.timestamp || conv.timestamp < oneWeekAgo)
+          .map(conv => conv.id);
+
+        for (const conversationId of expiredConversationIds) {
+          await this.deleteConversationById(conversationId, {
+            deleteMemory: true,
+          });
+        }
+
+        if (this.conversations.length === 0) {
+          this.conversationId = null;
+          this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+          this.fileLinks = [];
+        }
+
+        await this.saveConversations();
+      } catch (error) {
+        if (error?.message === 'delete_failed') {
+          showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+        }
+      }
+    },
+    async deleteConversationGroup(groupId, options = {}) {
+      this.ensureConversationGroups();
+      if (!groupId || groupId === 'default') return;
+
+      const groupConversationIds = this.conversations
+        .filter(conv => (conv.groupId || 'default') === groupId)
+        .map(conv => conv.id);
+
+      for (const conversationId of groupConversationIds) {
+        await this.deleteConversationById(conversationId, {
+          deleteMemory: true,
+        });
+      }
+
+      this.conversationGroups = this.conversationGroups.filter(group => group.id !== groupId);
+
+      if (this.draftConversationGroupId === groupId) {
+        this.draftConversationGroupId = 'default';
+      }
+      if (this.activeConversationGroupId === groupId) {
+        this.activeConversationGroupId = 'default';
+      }
+
+      await this.saveConversations();
+      if (!options.silent) {
+        showNotification(this.t('groupDeleted'), 'success');
+      }
+    },
+    async confirmDeleteGroupDeletion() {
+      const groupId = this.deleteGroupForm?.id;
+      if (!groupId) return;
+      try {
+        await this.deleteConversationGroup(groupId);
+        this.showDeleteGroupDialog = false;
+      } catch (error) {
+        showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+      }
+    },
+    openRenameConversationDialog(conversation) {
+      if (!conversation?.id) return;
+      this.conversationRenameForm = {
+        id: conversation.id,
+        name: conversation.title || '',
+      };
+      this.showConversationRenameDialog = true;
+    },
+    async submitConversationRename() {
+      const name = String(this.conversationRenameForm?.name || '').trim();
+      if (!name) {
+        showNotification(this.t('conversationNameRequired'), 'error');
+        return;
+      }
+      const conversation = this.conversations.find(conv => conv.id === this.conversationRenameForm?.id);
+      if (!conversation) return;
+      conversation.title = name;
+      await this.saveConversations();
+      this.showConversationRenameDialog = false;
+      showNotification(this.t('conversationRenamed'), 'success');
+    },
+    async confirmDeleteConversationDeletion() {
+      const conversationId = this.deleteConversationForm?.id;
+      if (!conversationId) return;
+      try {
+        await this.deleteConversationById(conversationId, {
+          deleteMemory: !!this.deleteConversationForm?.deleteMemory,
+        });
+      } catch (error) {
+        showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+        return;
+      }
+      await this.saveConversations();
+      this.showDeleteConversationDialog = false;
+      showNotification(this.t('conversationDeleted'), 'success');
     },
     async loadConversation(convId) {
       const conversation = this.conversations.find(c => c.id === convId);
@@ -532,6 +832,8 @@ let vue_methods = {
         this.mainAgent = conversation.mainAgent;
         this.showHistoryDialog = false;
         this.system_prompt = conversation.system_prompt?conversation.system_prompt:" ";
+        this.draftConversationGroupId = conversation.groupId || 'default';
+        this.activeConversationGroupId = conversation.groupId || 'default';
       }
       else {
         this.system_prompt = " ";
@@ -560,6 +862,50 @@ let vue_methods = {
       });
 
       this.autoSaveSettings();
+    },
+    formatConversationTime(timestamp) {
+      if (!timestamp) return '';
+      const date = new Date(timestamp);
+      const now = new Date();
+      if (date.toDateString() === now.toDateString()) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      return date.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+    },
+    getConversationPreview(conversation) {
+      const messages = Array.isArray(conversation?.messages) ? conversation.messages : [];
+      const firstUsefulMessage = messages.find(msg => msg && msg.role !== 'system' && msg.content);
+      if (!firstUsefulMessage) return this.t('newChat');
+
+      const rawContent = Array.isArray(firstUsefulMessage.content)
+        ? firstUsefulMessage.content.map(item => item?.text || '').join(' ')
+        : String(firstUsefulMessage.content);
+
+      const preview = rawContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return preview || this.t('newChat');
+    },
+    async syncGroupMemoryAfterReply(userMessage, assistantMessage) {
+      const groupId = this.draftConversationGroupId || this.activeConversationGroupId || 'default';
+      if (!groupId || groupId === 'default') return;
+      if (!userMessage?.id || !assistantMessage?.id) return;
+
+      try {
+        await fetch('/api/group-memory/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            group_id: this.stringifyEntityId(groupId),
+            conversation_id: this.stringifyEntityId(this.conversationId),
+            user_message_id: this.stringifyEntityId(userMessage.id),
+            assistant_message_id: this.stringifyEntityId(assistantMessage.id),
+            user_message: userMessage.pure_content ?? userMessage.content ?? '',
+            assistant_message: assistantMessage.pure_content ?? assistantMessage.content ?? '',
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to sync group memory:', error);
+        showNotification(this.t('memorySyncFailed'), 'error');
+      }
     },
     switchToagents() {
       this.activeMenu = 'api-group';
@@ -1431,6 +1777,7 @@ let vue_methods = {
           this.system_prompt = data.data.system_prompt || '';
           this.SystemPromptsList = data.data.SystemPromptsList || [];
           this.conversations = data.data.conversations || this.conversations;
+          this.conversationGroups = data.data.conversationGroups || this.conversationGroups;
           this.conversationId = data.data.conversationId || this.conversationId;
           this.agents = data.data.agents || this.agents;
           this.mainAgent = data.data.mainAgent || this.mainAgent;
@@ -1510,6 +1857,7 @@ let vue_methods = {
           this.customHttpTools = data.data.custom_http || this.customHttpTools;
           this.isGroupMode = data.data.isGroupMode || this.isGroupMode;
           this.selectedGroupAgents = data.data.selectedGroupAgents || this.selectedGroupAgents;
+          this.ensureConversationGroups();
           this.loadConversation(this.conversationId);
           // 初始化时确保数据一致性
           this.edgettsLanguage = this.ttsSettings.edgettsLanguage;
@@ -1957,6 +2305,8 @@ let vue_methods = {
         let tts_buffer = '';
         let isCodeBlock = false;
         this.cur_voice = 'default';
+        const latestUserMessage = [...this.messages].reverse().find(msg => msg.role === 'user');
+        let shouldSyncGroupMemory = false;
         
         const toolCallStack = [];
         this.toolArgsAccumulator = this.toolArgsAccumulator || {}; 
@@ -2125,6 +2475,9 @@ let vue_methods = {
                     fileLinks: this.fileLinks,
                     asyncToolsID: this.asyncToolsID || [],
                     reasoning_effort: this.reasoning_effort,
+                    conversation_id: this.stringifyEntityId(this.conversationId),
+                    group_id: this.stringifyEntityId(this.draftConversationGroupId || this.activeConversationGroupId || 'default'),
+                    user_message_id: this.stringifyEntityId(latestUserMessage?.id || null),
                 }),
                 signal: this.abortController.signal 
             });
@@ -2506,6 +2859,7 @@ let vue_methods = {
                     id: this.conversationId,
                     title: this.generateConversationTitle(messagesPayload),
                     mainAgent: this.mainAgent,
+                    groupId: this.draftConversationGroupId || 'default',
                     timestamp: Date.now(),
                     messages: this.messages,
                     fileLinks: this.fileLinks,
@@ -2518,6 +2872,7 @@ let vue_methods = {
                     conv.messages = this.messages;
                     conv.timestamp = Date.now();
                     conv.fileLinks = this.fileLinks;
+                    conv.groupId = conv.groupId || this.draftConversationGroupId || 'default';
                 }
             }
             this.saveConversations();
@@ -2527,12 +2882,17 @@ let vue_methods = {
             }
 
             this.isThinkOpen = false;
+            shouldSyncGroupMemory = !!currentMsg?.pure_content?.trim();
             
             setTimeout(() => {
                 if (!this.isSending && this.audioStartTime <= this.audioCtx.currentTime) {
                     this.sendTTSStatusToVRM('allChunksCompleted', {});
                 }
             }, 1000);
+
+            if (shouldSyncGroupMemory && latestUserMessage?.id && currentMsg?.id) {
+                await this.syncGroupMemoryAfterReply(latestUserMessage, currentMsg);
+            }
         }
     },
 
@@ -2999,6 +3359,7 @@ let vue_methods = {
           tools: this.toolsSettings,
           llmTools: this.llmTools,
           conversationId: this.conversationId,
+          conversationGroups: this.conversationGroups,
           reasoner: this.reasonerSettings,
           fast: this.fastSettings,
           isBtnCollapse: this.isBtnCollapse,
@@ -3082,6 +3443,7 @@ let vue_methods = {
       // 使用 map 创建新数组，不影响原始的内存数据
       return this.conversations.map(conv => ({
         ...conv,
+        groupId: conv.groupId || 'default',
         // 清洗消息列表
         messages: conv.messages.map(msg => {
           // 使用解构赋值，排除掉不需要保存的大体积/临时属性
@@ -3110,10 +3472,12 @@ let vue_methods = {
 
     async saveConversations() {
       return new Promise((resolve, reject) => {
+        this.ensureConversationGroups();
         const sanitizedConversations = this.getSanitizedConversations();
 
         const payload = {
-          conversations: sanitizedConversations
+          conversations: sanitizedConversations,
+          conversationGroups: this.conversationGroups
         };
         const correlationId = uuid.v4();
         // 发送保存请求
@@ -3236,6 +3600,8 @@ let vue_methods = {
       } else {
         this.messages = [{ role: 'system', content: ' ' }];
       }
+      this.ensureConversationGroups();
+      this.draftConversationGroupId = this.activeConversationGroupId || this.draftConversationGroupId || 'default';
       this.conversationId = null;
       this.fileLinks = [];
       this.isThinkOpen = false; // 重置思考模式状态
@@ -7445,6 +7811,7 @@ handleCreateSlackSeparator(val) {
     async toggleASR() {
       this.asrSettings.enabled = !this.asrSettings.enabled;
       this.autoSaveSettings();
+
       if (this.asrSettings.enabled === true && this.asrSettings.engine === 'sherpa'){
         if (!this.sherpaModelExists){
           showNotification(this.t('autoDownloadModel'), 'info');
@@ -7455,6 +7822,7 @@ handleCreateSlackSeparator(val) {
           return;
         }
       }
+      
       if (this.asrSettings.enabled) {
         await this.startASR();
       } else {
@@ -7469,6 +7837,7 @@ handleCreateSlackSeparator(val) {
       
       // 先彻底停止
       await this.stopASR(); 
+
       if (this.asrSettings.enabled === true && this.asrSettings.engine === 'sherpa'){
         if (!this.sherpaModelExists){
           showNotification(this.t('autoDownloadModel'), 'info');
@@ -7479,14 +7848,33 @@ handleCreateSlackSeparator(val) {
           return;
         }
       }
-
+      
       if (this.asrSettings.enabled) {
         // 给系统 200ms 时间回收资源
         await new Promise(resolve => setTimeout(resolve, 200));
         await this.startASR();
       }
+    },
 
-      this.autoSaveSettings();
+    async getAutoSource() {
+      try {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const isMainlandChinaTimezone = [
+          'Asia/Shanghai',
+          'Asia/Chongqing',
+          'Asia/Harbin',
+          'Asia/Urumqi'
+        ].includes(timezone);
+
+        const isChineseLanguage = navigator.language.startsWith('zh');
+
+        if (isMainlandChinaTimezone || isChineseLanguage) {
+          return 'modelscope';
+        }
+      } catch (e) {
+        console.error('Failed to detect locale', e);
+      }
+      return 'huggingface';
     },
 
     // 修改：启动ASR
@@ -8119,30 +8507,6 @@ handleCreateSlackSeparator(val) {
       }
     },
 
-    // 自动判断下载源的工具函数
-    async getAutoSource() {
-      try {
-        // 1. 检查时区
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const isMainlandChinaTimezone = [
-          'Asia/Shanghai', 
-          'Asia/Chongqing', 
-          'Asia/Harbin', 
-          'Asia/Urumqi'
-        ].includes(timezone);
-
-        // 2. 检查语言
-        const isChineseLanguage = navigator.language.startsWith('zh');
-
-        if (isMainlandChinaTimezone || isChineseLanguage) {
-          return 'modelscope';
-        }
-      } catch (e) {
-        console.error('Failed to detect locale', e);
-      }
-      return 'huggingface'; // 默认源
-    },
-
     async changeTTSstatus() {
       if (!this.ttsSettings.enabled) {
         this.TTSrunning = false;
@@ -8178,7 +8542,8 @@ handleCreateSlackSeparator(val) {
             .replace(/[\u{2600}-\u{27BF}\u{2700}-\u{27BF}\u{1F300}-\u{1F9FF}]/gu, '')
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
             .replace(/!\[.*?\]\(.*?\)/g, '')
-            .replace(/\[(.*?)\]\(.*?\)/g, '$1');
+            .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+            .trim();
 
         if (!buffer) {
             return {
@@ -11150,7 +11515,7 @@ stopTTSActivities() {
       name: '',
       enabled: true,
       SampleText: 'super agent party链接一切！',
-      engine: 'moss',
+      engine: 'edgetts',
       edgettsLanguage: 'zh-CN',
       edgettsGender: 'Female',
       edgettsVoice: 'XiaoyiNeural',
@@ -11172,8 +11537,6 @@ stopTTSActivities() {
       customTTSserver: "http://127.0.0.1:9880",
       customTTSspeaker: "",
       customTTSspeed: 1.0,
-      mossVoice: 'Junhao',
-      mossSpeed: 1.0,
     };
     this.showAddTTSDialog = true;
   },
@@ -12885,68 +13248,105 @@ async togglePlugin(plugin) {
     }
   },
   // 开始拖拽调整大小
-  startResize(e) {
-    if (!this.chatAreaOpen || !this.sidePanelOpen) return;
-    
-    const container = this.$refs.chatWrapperRef;
-    // 获取当前历史侧边栏是否可见并获取宽度
-    const historySidebar = container.querySelector('.chat-history-sidebar');
-    const isSidebarVisible = this.showHistorySidebar && !this.isMobile;
-    const sidebarWidth = isSidebarVisible ? historySidebar.offsetWidth : 0;
+  startChatHistoryResize(e) {
+    if (!this.chatHistoryPanelOpen || this.isMobile) return;
 
+    e.preventDefault();
+    this.isHistoryPanelResizing = true;
     this.isResizing = true;
-    const containerRect = container.getBoundingClientRect();
-    const availableWidth = containerRect.width - sidebarWidth; // 减去历史栏宽度
-    
-    container.classList.add('resizing');
 
-    const handleMouseMove = (e) => {
-      if (!this.isResizing) return;
-      
-      // 这里的 mouseX 必须相对于聊天区的左边缘
-      const mouseXInChat = e.clientX - (containerRect.left + sidebarWidth);
-      const clampedMouseX = Math.max(0, Math.min(mouseXInChat, availableWidth));
-      
-      const leftWidth = clampedMouseX;
-      const rightWidth = availableWidth - clampedMouseX - 10; // 10 是分割条宽
-      
-      const leftPercent = (leftWidth / availableWidth) * 100;
-      const rightPercent = (rightWidth / availableWidth) * 100;
-      
-      if (leftPercent < this.minPanelWidth) {
-        this.collapseChatArea();
-        handleMouseUp();
-        return;
-      }
-      
-      if (rightPercent < this.minPanelWidth) {
-        this.collapseSidePanel();
-        handleMouseUp();
-        return;
-      }
-      
-      this.updatePanelWidthsWithPixels(leftWidth, rightWidth);
+    const handleMouseMove = (moveEvent) => {
+      if (!this.isHistoryPanelResizing) return;
+      const container = this.$refs.chatAreaRef;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const nextWidth = moveEvent.clientX - rect.left;
+      this.chatHistoryPanelWidth = Math.max(220, Math.min(nextWidth, 520));
     };
 
     const handleMouseUp = () => {
+      this.isHistoryPanelResizing = false;
       this.isResizing = false;
-      container.classList.remove('resizing');
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      this.recalculatePercentages(availableWidth);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   },
 
-  handleHistoryToggle() {
-      this.showHistorySidebar = !this.showHistorySidebar;
-      // 强制触发一次 recalculate，让右侧聊天区重新适应剩余宽度
-      this.$nextTick(() => {
-          this.handleResize(); 
-      });
+  startResize(e) {
+    if (!this.chatAreaOpen || !this.sidePanelOpen) return;
+    
+    const container = this.$refs.chatWrapperRef;
+    if (!container) {
+      console.error('Container not found');
+      return;
+    }
+    
+    this.isResizing = true;
+    const startX = e.clientX;
+    const containerRect = container.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    
+    // 添加拖拽状态类到容器
+    container.classList.add('resizing');
+
+    const handleMouseMove = (e) => {
+      if (!this.isResizing) return;
+      
+      // 计算鼠标相对于容器的位置
+      const mouseX = e.clientX - containerRect.left;
+      
+      // 限制鼠标位置在容器范围内
+      const clampedMouseX = Math.max(0, Math.min(mouseX, containerWidth));
+      
+      // 计算新的分割条位置（像素值）
+      const newResizerPosition = clampedMouseX;
+      
+      // 计算左右面板的像素宽度
+      const leftWidth = newResizerPosition;
+      const rightWidth = containerWidth - newResizerPosition - 8; // 8px 是分割条宽度
+      
+      // 转换为百分比（用于检查最小宽度）
+      const leftPercent = (leftWidth / containerWidth) * 100;
+      const rightPercent = (rightWidth / containerWidth) * 100;
+      
+      // 检查是否需要收起面板
+      if (leftPercent < this.minPanelWidth) {
+        this.collapseChatArea();
+        return;
+      }
+      
+      if (rightPercent < this.minPanelWidth) {
+        this.collapseSidePanel();
+        return;
+      }
+      
+      // 直接设置像素宽度，而不是百分比
+      this.updatePanelWidthsWithPixels(leftWidth, rightWidth);
+    };
+
+    const handleMouseUp = () => {
+      this.isResizing = false;
+      
+      // 移除拖拽状态类
+      container.classList.remove('resizing');
+      
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      
+      // 拖拽结束后，重新计算百分比（用于响应式）
+      this.recalculatePercentages();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
   },
 
   // 使用像素宽度更新面板
@@ -12967,26 +13367,22 @@ async togglePlugin(plugin) {
   },
 
   // 重新计算百分比（用于保存状态和响应式）
-  recalculatePercentages(providedAvailableWidth) {
+  recalculatePercentages() {
     const container = this.$refs.chatWrapperRef;
-    const historySidebar = container?.querySelector('.chat-history-sidebar');
-    const sidebarWidth = (historySidebar && !this.isMobile) ? historySidebar.offsetWidth : 0;
+    if (!container) return;
     
-    // 如果没有传入宽度，则实时计算
-    const availableWidth = providedAvailableWidth || (container.offsetWidth - sidebarWidth);
-    
+    const containerWidth = container.offsetWidth;
     const chatArea = this.$refs.chatAreaRef;
     const sidePanel = this.$refs.sidePanelRef;
     
     if (chatArea && sidePanel && this.chatAreaOpen && this.sidePanelOpen) {
-      const chatAreaWidthPx = chatArea.offsetWidth;
-      const sidePanelWidthPx = sidePanel.offsetWidth;
+      const chatAreaWidth = chatArea.offsetWidth;
+      const sidePanelWidth = sidePanel.offsetWidth;
       
-      // 基于可用宽度计算比例
-      this.chatAreaWidth = (chatAreaWidthPx / availableWidth) * 100;
-      this.sidePanelWidth = (sidePanelWidthPx / availableWidth) * 100;
+      this.chatAreaWidth = (chatAreaWidth / containerWidth) * 100;
+      this.sidePanelWidth = (sidePanelWidth / containerWidth) * 100;
     }
-  },  
+  },
 
   // 处理分割条点击
   handleResizerClick(e) {

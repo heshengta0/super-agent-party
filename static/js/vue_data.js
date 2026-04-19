@@ -176,6 +176,35 @@ let vue_data = {
     currentMessage: '',
     conversationId: null, // 当前对话ID
     conversations: [], // 对话历史记录
+    conversationGroups: [],
+    chatHistoryPanelOpen: true,
+    chatHistoryPanelWidth: 320,
+    draftConversationGroupId: 'default',
+    activeConversationGroupId: 'default',
+    showConversationGroupDialog: false,
+    conversationGroupDialogMode: 'create',
+    conversationGroupForm: {
+      id: null,
+      name: '',
+      memoryEnabled: false,
+    },
+    showConversationRenameDialog: false,
+    conversationRenameForm: {
+      id: null,
+      name: '',
+    },
+    showDeleteConversationDialog: false,
+    deleteConversationForm: {
+      id: null,
+      title: '',
+      deleteMemory: false,
+    },
+    showDeleteGroupDialog: false,
+    deleteGroupForm: {
+      id: null,
+      name: '',
+      conversationCount: 0,
+    },
     showHistoryDialog: false,
     showLLMToolsDialog: false,
     showHttpToolDialog: false,
@@ -607,6 +636,7 @@ let vue_data = {
     chatAreaWidth: 50,         // 对话区域宽度百分比
     sidePanelWidth: 50,        // 侧边栏宽度百分比
     isResizing: false,         // 是否正在调整大小
+    isHistoryPanelResizing: false,
     minPanelWidth: 25,         // 最小面板宽度百分比
     extensions: [],              // 所有发现的扩展
     currentExtension: null,      // 当前加载的扩展

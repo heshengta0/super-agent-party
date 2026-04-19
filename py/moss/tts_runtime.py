@@ -284,24 +284,11 @@ class TTSRuntime(OrtCpuRuntime):
         )
 
     def _load_reference_audio(self, reference_audio_path: str | Path) -> np.ndarray:
-            """
-            加载参考音频并进行预处理：
-            1. 自动切除首尾静音 2. 响度归一化 3. 限制长度为 5s 4. 重采样与声道转换
-            """
-            import numpy as np
-            from pathlib import Path
-            import soundfile as sf
-            import logging
-
-            # 1. 读取音频文件
             abs_path = str(Path(reference_audio_path).expanduser().resolve())
             waveform, sample_rate = sf.read(abs_path, always_2d=True)
             waveform = waveform.astype(np.float32)
 
-            # 2. 简单静音裁剪 (防止开头结尾的噪音/空白干扰模型)
-            # 计算每一帧的平均能量，切除低于阈值的部分
             def trim_silence(wav, threshold=0.01):
-                # wav shape: (samples, channels)
                 energy = np.mean(np.abs(wav), axis=1)
                 mask = energy > threshold
                 if not np.any(mask):
@@ -312,23 +299,20 @@ class TTSRuntime(OrtCpuRuntime):
 
             waveform = trim_silence(waveform)
 
-            # 3. 响度归一化 (Peak Normalization)
-            # 确保参考音频音量标准，避免因为声音太小导致模型产生幻觉
             peak = np.max(np.abs(waveform))
             if peak > 1e-5:
                 waveform = (waveform / peak) * 0.9
-
-            # 4. 核心优化：截断参考音频
-            # MOSS 提取音色通常只需 3~5 秒。过长会导致 GPT 上下文压力过大出现胡言乱语。
-            max_duration = 5.0 
+            
+            # ================== 核心优化 1：截断超长参考音频 ==================
+            # MOSS 提取音色只需要几秒钟。限制最大读取长度为 8 秒
+            # 避免用户上传长音频导致 scipy resample 和 ONNX Encode 卡死
+            max_duration = 5.0
             max_samples = int(sample_rate * max_duration)
             if waveform.shape[0] > max_samples:
                 waveform = waveform[:max_samples, :]
+            # =================================================================
 
-            # 转置为 (channels, samples)
             waveform = waveform.T
-
-            # 5. 重采样逻辑
             target_sample_rate = int(self.codec_meta["codec_config"]["sample_rate"])
             target_channels = int(self.codec_meta["codec_config"]["channels"])
             
@@ -338,29 +322,24 @@ class TTSRuntime(OrtCpuRuntime):
                     num_samples = int(waveform.shape[1] * target_sample_rate / sample_rate)
                     resampled = []
                     for channel in waveform:
-                        # 使用 scipy 进行高质量重采样
                         resampled_channel = signal.resample(channel, num_samples)
                         resampled.append(resampled_channel)
                     waveform = np.array(resampled, dtype=np.float32)
                 except ImportError:
                     logging.warning("scipy not available, skipping resampling. This may cause pitch issues.")
             
-            # 6. 声道转换
             current_channels = waveform.shape[0]
             if current_channels == target_channels:
                 pass
             elif current_channels == 1 and target_channels > 1:
-                # 单声道转多声道
                 waveform = np.tile(waveform, (target_channels, 1))
             elif current_channels > 1 and target_channels == 1:
-                # 多声道转单声道（取平均值）
                 waveform = np.mean(waveform, axis=0, keepdims=True)
             else:
                 raise ValueError(f"Unsupported channel conversion: {current_channels} -> {target_channels}")
             
-            # 返回符合 ONNX 要求的形状 [1, channels, samples]
             return waveform[np.newaxis, ...].astype(np.float32)
-    
+
     def encode_reference_audio(self, reference_audio_path: str | Path) -> list[list[int]]:
             abs_path = str(Path(reference_audio_path).expanduser().resolve())
             

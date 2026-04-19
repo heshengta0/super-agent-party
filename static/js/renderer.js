@@ -1626,6 +1626,21 @@ const handleRemoteInstall = (data) => {
             })
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
+    groupedFilteredConversations() {
+      const groups = Array.isArray(this.conversationGroups) ? this.conversationGroups : [];
+      const conversations = Array.isArray(this.filteredConversations) ? this.filteredConversations : [];
+      const keyword = (this.searchKeyword || '').trim().toLowerCase();
+
+      return groups
+        .map(group => ({
+          ...group,
+          conversations: conversations.filter(conv => (conv.groupId || 'default') === group.id)
+        }))
+        .filter(group => {
+          if (!keyword) return true;
+          return group.conversations.length > 0 || (group.name || '').toLowerCase().includes(keyword);
+        });
+    },
     iconClass() {
       return this.isExpanded ? 'fa-solid fa-compress' : 'fa-solid fa-expand';
     },
