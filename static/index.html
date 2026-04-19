@@ -1504,7 +1504,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                         v-if="!isCapsuleMode && !isMobile"
                         @click="chatHistoryPanelOpen = !chatHistoryPanelOpen"
                         class="icon-btn history-btn"
-                        :type="chatHistoryPanelOpen || conversations.length > 0 ? 'primary' : 'default'"
+                        :type="chatHistoryPanelOpen ? 'primary' : 'default'"
                         circle>
                         <i class="fa-solid fa-clock-rotate-left"></i>
                       </el-button>
@@ -16920,7 +16920,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                         v-if="!isCapsuleMode && !isMobile"
                         @click="chatHistoryPanelOpen = !chatHistoryPanelOpen"
                         class="icon-btn history-btn"
-                        :type="chatHistoryPanelOpen || conversations.length > 0 ? 'primary' : 'default'"
+                        :type="chatHistoryPanelOpen ? 'primary' : 'default'"
                         circle>
                         <i class="fa-solid fa-clock-rotate-left"></i>
                       </el-button>
