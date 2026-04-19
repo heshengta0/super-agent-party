@@ -1062,7 +1062,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <i class="fa-solid fa-plus"></i>
                           {{ t('newChat') }}
                         </el-button>
-                        <template v-if="chatHistoryPanelWidth >= 320">
+                        <template v-if="chatHistoryPanelWidth >= 250">
                           <el-button class="chat-history-new-group-btn" @click="createConversationGroup()">
                             <i class="fa-solid fa-folder-plus"></i>
                             {{ t('newGroup') }}
