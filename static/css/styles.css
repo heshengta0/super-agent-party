@@ -4097,15 +4097,15 @@ body {
   border-radius: 999px !important;
   padding: 12px 18px !important;
   min-height: 46px;
-  background: linear-gradient(135deg, #2563EB 0%, #0EA5E9 100%) !important;
+  background: linear-gradient(135deg, #5B8DEE 0%, #6FA7F6 100%) !important;
   color: #fff !important;
   font-weight: 700 !important;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 10px 20px rgba(91, 141, 238, 0.18);
   flex-shrink: 0;
 }
 
 .chat-history-new-btn:hover {
-  background: linear-gradient(135deg, #1D4ED8 0%, #0284C7 100%) !important;
+  background: linear-gradient(135deg, #4C7FDF 0%, #5D97EE 100%) !important;
   color: #fff !important;
 }
 
