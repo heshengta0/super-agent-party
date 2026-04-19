@@ -220,6 +220,26 @@ async def init_covs_db():
                 data TEXT NOT NULL
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS group_memory (
+                id TEXT PRIMARY KEY,
+                group_id TEXT NOT NULL,
+                source_chat_id TEXT NOT NULL,
+                source_message_id TEXT,
+                memory_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                importance REAL NOT NULL DEFAULT 0.5,
+                status TEXT NOT NULL DEFAULT 'active',
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                last_used_at INTEGER,
+                metadata_json TEXT
+            )
+        ''')
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_group_memory_group_status ON group_memory(group_id, status)')
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_group_memory_source_chat ON group_memory(source_chat_id)')
         await db.commit()
     _covs_db_init_done = True
 

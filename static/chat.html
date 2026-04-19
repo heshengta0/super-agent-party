@@ -449,6 +449,72 @@ function updateElement(el, rawMarkdown, formatFn) {
                 ref="chatAreaRef"
                 :class="{ collapsed: !chatAreaOpen }" 
                 v-show="chatAreaOpen">
+              <div class="chat-area-layout">
+                <aside
+                  v-if="!isCapsuleMode && !isAssistantMode && !isMobile"
+                  class="chat-history-panel"
+                  :class="{ collapsed: !chatHistoryPanelOpen }"
+                >
+                  <div v-show="chatHistoryPanelOpen" class="chat-history-inner">
+                    <div class="chat-history-header">
+                      <div>
+                        <div class="chat-history-title">{{ t('chatHistory') }}</div>
+                        <div class="chat-history-subtitle">{{ conversations.length }} / {{ t('conversation') }}</div>
+                      </div>
+                      <el-button type="primary" link @click="clearMessages">
+                        <i class="fa-solid fa-plus"></i>
+                        {{ t('newChat') }}
+                      </el-button>
+                    </div>
+
+                    <div class="chat-history-search">
+                      <el-input
+                        v-model="searchKeyword"
+                        :placeholder="t('searchChatHistoryPlaceholder')"
+                        clearable
+                      >
+                        <template #prefix>
+                          <i class="fa-solid fa-magnifying-glass"></i>
+                        </template>
+                      </el-input>
+                    </div>
+
+                    <div class="chat-history-list">
+                      <div
+                        v-for="conv in filteredConversations"
+                        :key="conv.id"
+                        class="chat-history-item"
+                        :class="{ active: conv.id === conversationId }"
+                        role="button"
+                        tabindex="0"
+                        @click="loadConversation(conv.id)"
+                        @keydown.enter.prevent="loadConversation(conv.id)"
+                      >
+                        <div class="chat-history-item-main">
+                          <div class="chat-history-item-top">
+                            <span class="chat-history-item-title">{{ conv.title || t('newChat') }}</span>
+                            <span class="chat-history-item-time">{{ formatConversationTime(conv.timestamp) }}</span>
+                          </div>
+                          <div class="chat-history-item-preview">{{ getConversationPreview(conv) }}</div>
+                        </div>
+                        <el-button
+                          class="chat-history-delete"
+                          link
+                          type="danger"
+                          @click.stop="confirmDeleteConversation(conv.id)"
+                        >
+                          <i class="fa-solid fa-trash-can"></i>
+                        </el-button>
+                      </div>
+
+                      <div v-if="filteredConversations.length === 0" class="chat-history-empty">
+                        <i class="fa-regular fa-comments"></i>
+                        <span>{{ conversations.length === 0 ? t('newChat') : t('search') }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+                <div class="chat-main-column">
               <div class="messages-container" ref="messagesContainer" v-if="!isCapsuleMode" @click.capture="handleMessageLinkClick">
                 <!-- 添加 is-group-mode 类 -->
                 <div v-for="(message, index) in messages" :key="index" class="message" :class="[message.role, { 'is-group-mode': isGroupMode }]">
@@ -765,10 +831,10 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                     <el-tooltip :content="t('chatHistory')" placement="top">
                       <el-button
-                        v-if="!isCapsuleMode"
-                        @click="showHistoryDialog = true"
+                        v-if="!isCapsuleMode && !isMobile"
+                        @click="chatHistoryPanelOpen = !chatHistoryPanelOpen"
                         class="icon-btn history-btn"
-                        :type="conversations.length === 0 ? 'default' : 'primary'"
+                        :type="chatHistoryPanelOpen || conversations.length > 0 ? 'primary' : 'default'"
                         circle>
                         <i class="fa-solid fa-clock-rotate-left"></i>
                       </el-button>
@@ -1378,6 +1444,8 @@ function updateElement(el, rawMarkdown, formatFn) {
               </div>
             </div>
             <!-- 可拖拽的分割条 -->
+            </div>
+            </div>
             <div
               v-if="!isCapsuleMode && !isAssistantMode && !isMobile"
               class="resizer"
