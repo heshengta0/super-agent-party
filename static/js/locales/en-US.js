@@ -279,6 +279,7 @@ window.lang_enUS = {
         'moreActions': 'More Actions',
         'confirmDeleteConversation': 'Delete this conversation?',
         'confirmDeleteGroup': 'Delete this group?',
+        'deleteGroupWillDeleteChats': 'This will also delete {count} chats in the group, along with related group memory.',
         'deleteRelatedMemory': 'Also delete memory extracted from this chat',
         'conversationDeleted': 'Conversation deleted',
         'groupRenamed': 'Group renamed',

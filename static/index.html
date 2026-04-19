@@ -1036,30 +1036,50 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <div class="chat-history-title">{{ t('chatHistory') }}</div>
                           <div class="chat-history-subtitle">{{ conversations.length }} / {{ t('conversation') }}</div>
                         </div>
-                        <div class="chat-history-header-actions">
-                          <el-button class="chat-history-new-btn" @click="startConversationInGroup()">
-                            <i class="fa-solid fa-plus"></i>
-                            {{ chatHistoryPanelWidth < 280 ? t('newChat') : t('newChat') }}
-                          </el-button>
-                          <template v-if="chatHistoryPanelWidth >= 250">
-                            <el-button class="chat-history-new-group-btn" @click="createConversationGroup()">
-                              <i class="fa-solid fa-folder-plus"></i>
-                              {{ chatHistoryPanelWidth < 290 ? t('newGroup') : t('newGroup') }}
+                        <div class="chat-history-header-tools">
+                          <el-tooltip :content="t('keepLastWeek')" placement="top">
+                            <el-button
+                              class="chat-history-header-icon-btn"
+                              @click="pruneHistoryToLastWeek"
+                              circle
+                            >
+                              <i class="fa-solid fa-calendar-week"></i>
                             </el-button>
-                          </template>
-                          <el-dropdown v-else trigger="click" placement="bottom-end">
-                            <el-button class="chat-history-header-more-btn" @click.stop>
-                              <i class="fa-solid fa-ellipsis"></i>
+                          </el-tooltip>
+                          <el-tooltip :content="t('clearAllHistory')" placement="top">
+                            <el-button
+                              class="chat-history-header-icon-btn danger"
+                              @click="clearAllHistoryRecords"
+                              circle
+                            >
+                              <i class="fa-solid fa-trash-can"></i>
                             </el-button>
-                            <template #dropdown>
-                              <el-dropdown-menu>
-                                <el-dropdown-item @click="createConversationGroup()">
-                                  {{ t('newGroup') }}
-                                </el-dropdown-item>
-                              </el-dropdown-menu>
-                            </template>
-                          </el-dropdown>
+                          </el-tooltip>
                         </div>
+                      </div>
+                      <div class="chat-history-header-actions">
+                        <el-button class="chat-history-new-btn" @click="startConversationInGroup()">
+                          <i class="fa-solid fa-plus"></i>
+                          {{ t('newChat') }}
+                        </el-button>
+                        <template v-if="chatHistoryPanelWidth >= 320">
+                          <el-button class="chat-history-new-group-btn" @click="createConversationGroup()">
+                            <i class="fa-solid fa-folder-plus"></i>
+                            {{ t('newGroup') }}
+                          </el-button>
+                        </template>
+                        <el-dropdown v-else trigger="click" placement="bottom-end">
+                          <el-button class="chat-history-header-more-btn" @click.stop>
+                            <i class="fa-solid fa-ellipsis"></i>
+                          </el-button>
+                          <template #dropdown>
+                            <el-dropdown-menu>
+                              <el-dropdown-item @click="createConversationGroup()">
+                                {{ t('newGroup') }}
+                              </el-dropdown-item>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
                       </div>
                     </div>
 
@@ -2997,28 +3017,24 @@ function updateElement(el, rawMarkdown, formatFn) {
               <div class="action-buttons">
                 <el-tooltip 
                   :content="t('keepLastWeek')" 
-                  placement="top"
-                  :disabled="!conversations || conversations.length === 0">
+                  placement="top">
                   <el-button 
                     type="info"
                     circle 
                     size="small"
-                    @click="keepLastWeek"
-                    :disabled="!conversations || conversations.length === 0">
+                    @click="pruneHistoryToLastWeek">
                     <i class="fa-solid fa-calendar-week"></i>
                   </el-button>
                 </el-tooltip>
 
                 <el-tooltip 
                   :content="t('clearAllHistory')" 
-                  placement="top"
-                  :disabled="!conversations || conversations.length === 0">
+                  placement="top">
                   <el-button 
                     type="danger"
                     circle 
                     size="small"
-                    @click="confirmClearAll"
-                    :disabled="!conversations || conversations.length === 0">
+                    @click="clearAllHistoryRecords">
                     <i class="fa-solid fa-trash-can"></i>
                   </el-button>
                 </el-tooltip>
@@ -3129,6 +3145,7 @@ function updateElement(el, rawMarkdown, formatFn) {
         >
           <div class="chat-history-confirm-copy">{{ t('confirmDeleteGroup') }}</div>
           <div class="chat-history-confirm-title">{{ deleteGroupForm.name }}</div>
+          <div class="chat-history-confirm-note">{{ getDeleteGroupWarningText() }}</div>
           <template #footer>
             <el-button @click="showDeleteGroupDialog = false">{{ t('cancel') }}</el-button>
             <el-button type="danger" @click="confirmDeleteGroupDeletion">{{ t('delete') }}</el-button>

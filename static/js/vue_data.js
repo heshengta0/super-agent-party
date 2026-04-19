@@ -203,6 +203,7 @@ let vue_data = {
     deleteGroupForm: {
       id: null,
       name: '',
+      conversationCount: 0,
     },
     showHistoryDialog: false,
     showLLMToolsDialog: false,

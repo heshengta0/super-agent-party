@@ -280,6 +280,7 @@ window.lang_zhCN = {
         'moreActions': '更多操作',
         'confirmDeleteConversation': '确认删除这个对话吗？',
         'confirmDeleteGroup': '确认删除这个分组吗？',
+        'deleteGroupWillDeleteChats': '删除后会同时删除该分组内的 {count} 条聊天记录，并且会一并清理相关的组内记忆。',
         'deleteRelatedMemory': '同时删除该对话生成的组内记忆',
         'conversationDeleted': '对话已删除',
         'groupRenamed': '分组已重命名',

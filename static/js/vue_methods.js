@@ -661,18 +661,108 @@ let vue_methods = {
       this.deleteGroupForm = {
         id: group.id,
         name: group.name || '',
+        conversationCount: this.conversations.filter(conv => (conv.groupId || 'default') === group.id).length,
       };
       this.showDeleteGroupDialog = true;
+    },
+    getDeleteGroupWarningText() {
+      const count = this.deleteGroupForm?.conversationCount || 0;
+      return String(this.t('deleteGroupWillDeleteChats')).replace('{count}', count);
+    },
+    async deleteConversationById(conversationId, options = {}) {
+      const response = await fetch('/api/conversations/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: this.stringifyEntityId(conversationId),
+          delete_memory: !!options.deleteMemory,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('delete_failed');
+      }
+
+      if (conversationId === this.conversationId) {
+        this.conversationId = null;
+        this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+        this.fileLinks = [];
+      }
+
+      this.conversations = this.conversations.filter(c => c.id !== conversationId);
+    },
+    async clearAllHistoryRecords() {
+      try {
+        await this.$confirm(this.t('confirmClearAllHistory'), this.t('warning'), {
+          confirmButtonText: this.t('confirm'),
+          cancelButtonText: this.t('cancel'),
+          type: 'warning'
+        });
+
+        const conversationIds = this.conversations.map(conv => conv.id);
+        for (const conversationId of conversationIds) {
+          await this.deleteConversationById(conversationId, {
+            deleteMemory: true,
+          });
+        }
+
+        this.conversationId = null;
+        this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+        this.fileLinks = [];
+        await this.saveConversations();
+      } catch (error) {
+        if (error?.message === 'delete_failed') {
+          showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+        }
+      }
+    },
+    async pruneHistoryToLastWeek() {
+      try {
+        await this.$confirm(this.t('confirmKeepLastWeek'), this.t('warning'), {
+          confirmButtonText: this.t('confirm'),
+          cancelButtonText: this.t('cancel'),
+          type: 'warning'
+        });
+
+        const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const expiredConversationIds = this.conversations
+          .filter(conv => !conv.timestamp || conv.timestamp < oneWeekAgo)
+          .map(conv => conv.id);
+
+        for (const conversationId of expiredConversationIds) {
+          await this.deleteConversationById(conversationId, {
+            deleteMemory: true,
+          });
+        }
+
+        if (this.conversations.length === 0) {
+          this.conversationId = null;
+          this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
+          this.fileLinks = [];
+        }
+
+        await this.saveConversations();
+      } catch (error) {
+        if (error?.message === 'delete_failed') {
+          showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+        }
+      }
     },
     async deleteConversationGroup(groupId, options = {}) {
       this.ensureConversationGroups();
       if (!groupId || groupId === 'default') return;
 
+      const groupConversationIds = this.conversations
+        .filter(conv => (conv.groupId || 'default') === groupId)
+        .map(conv => conv.id);
+
+      for (const conversationId of groupConversationIds) {
+        await this.deleteConversationById(conversationId, {
+          deleteMemory: true,
+        });
+      }
+
       this.conversationGroups = this.conversationGroups.filter(group => group.id !== groupId);
-      this.conversations = this.conversations.map(conv => ({
-        ...conv,
-        groupId: conv.groupId === groupId ? 'default' : (conv.groupId || 'default')
-      }));
 
       if (this.draftConversationGroupId === groupId) {
         this.draftConversationGroupId = 'default';
@@ -689,8 +779,12 @@ let vue_methods = {
     async confirmDeleteGroupDeletion() {
       const groupId = this.deleteGroupForm?.id;
       if (!groupId) return;
-      await this.deleteConversationGroup(groupId);
-      this.showDeleteGroupDialog = false;
+      try {
+        await this.deleteConversationGroup(groupId);
+        this.showDeleteGroupDialog = false;
+      } catch (error) {
+        showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
+      }
     },
     openRenameConversationDialog(conversation) {
       if (!conversation?.id) return;
@@ -716,28 +810,15 @@ let vue_methods = {
     async confirmDeleteConversationDeletion() {
       const conversationId = this.deleteConversationForm?.id;
       if (!conversationId) return;
-
-      const response = await fetch('/api/conversations/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: this.stringifyEntityId(conversationId),
-          delete_memory: !!this.deleteConversationForm?.deleteMemory,
-        }),
-      });
-
-      if (!response.ok) {
+      try {
+        await this.deleteConversationById(conversationId, {
+          deleteMemory: !!this.deleteConversationForm?.deleteMemory,
+        });
+      } catch (error) {
         showNotification(this.t('deleteFailed') || 'Delete failed', 'error');
         return;
       }
-
-      if (conversationId === this.conversationId) {
-        this.conversationId = null;
-        this.messages = [{ id: Date.now() + Math.random(), role: 'system', content: this.system_prompt }];
-        this.fileLinks = [];
-      }
-
-      this.conversations = this.conversations.filter(c => c.id !== conversationId);
+      await this.saveConversations();
       this.showDeleteConversationDialog = false;
       showNotification(this.t('conversationDeleted'), 'success');
     },
