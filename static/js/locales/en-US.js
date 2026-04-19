@@ -1635,5 +1635,8 @@ Key3`,
         'startLiveStream': 'Start Live',
         'enabledModeChangeTool': 'Enable Permission Mode Change Tool',
         'moss-TTS': 'MOSS TSS (requires local download, can run without a GPU)',
+        'autoDownloadModel': 'Model not installed, automatically downloading model',
+        'modelDownloadSuccess': 'Model download successful',
+        'modelDownloadFailed': 'Model download failed',
         'DefaultVoice': 'Default Voice',
     }

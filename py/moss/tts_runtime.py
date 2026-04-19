@@ -284,32 +284,49 @@ class TTSRuntime(OrtCpuRuntime):
         )
 
     def _load_reference_audio(self, reference_audio_path: str | Path) -> np.ndarray:
-            waveform, sample_rate = sf.read(str(Path(reference_audio_path).expanduser().resolve()), always_2d=True)
+            abs_path = str(Path(reference_audio_path).expanduser().resolve())
+            waveform, sample_rate = sf.read(abs_path, always_2d=True)
+            waveform = waveform.astype(np.float32)
+
+            def trim_silence(wav, threshold=0.01):
+                energy = np.mean(np.abs(wav), axis=1)
+                mask = energy > threshold
+                if not np.any(mask):
+                    return wav
+                start_idx = np.where(mask)[0][0]
+                end_idx = np.where(mask)[0][-1]
+                return wav[start_idx:end_idx, :]
+
+            waveform = trim_silence(waveform)
+
+            peak = np.max(np.abs(waveform))
+            if peak > 1e-5:
+                waveform = (waveform / peak) * 0.9
             
             # ================== 核心优化 1：截断超长参考音频 ==================
             # MOSS 提取音色只需要几秒钟。限制最大读取长度为 8 秒
             # 避免用户上传长音频导致 scipy resample 和 ONNX Encode 卡死
-            max_duration = 8.0 
+            max_duration = 5.0
             max_samples = int(sample_rate * max_duration)
             if waveform.shape[0] > max_samples:
                 waveform = waveform[:max_samples, :]
             # =================================================================
 
-            waveform = waveform.T.astype(np.float32)
+            waveform = waveform.T
             target_sample_rate = int(self.codec_meta["codec_config"]["sample_rate"])
             target_channels = int(self.codec_meta["codec_config"]["channels"])
             
             if sample_rate != target_sample_rate:
                 try:
                     from scipy import signal
-                    num_samples = int(len(waveform[0]) * target_sample_rate / sample_rate)
-                    resampled =[]
+                    num_samples = int(waveform.shape[1] * target_sample_rate / sample_rate)
+                    resampled = []
                     for channel in waveform:
                         resampled_channel = signal.resample(channel, num_samples)
                         resampled.append(resampled_channel)
                     waveform = np.array(resampled, dtype=np.float32)
                 except ImportError:
-                    logging.warning("scipy not available, skipping resampling")
+                    logging.warning("scipy not available, skipping resampling. This may cause pitch issues.")
             
             current_channels = waveform.shape[0]
             if current_channels == target_channels:
@@ -319,7 +336,7 @@ class TTSRuntime(OrtCpuRuntime):
             elif current_channels > 1 and target_channels == 1:
                 waveform = np.mean(waveform, axis=0, keepdims=True)
             else:
-                raise ValueError(f"Unsupported reference audio channel conversion: {current_channels} -> {target_channels}")
+                raise ValueError(f"Unsupported channel conversion: {current_channels} -> {target_channels}")
             
             return waveform[np.newaxis, ...].astype(np.float32)
 

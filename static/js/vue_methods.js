@@ -7811,6 +7811,17 @@ handleCreateSlackSeparator(val) {
     async toggleASR() {
       this.asrSettings.enabled = !this.asrSettings.enabled;
       this.autoSaveSettings();
+
+      if (this.asrSettings.enabled === true && this.asrSettings.engine === 'sherpa'){
+        if (!this.sherpaModelExists){
+          showNotification(this.t('autoDownloadModel'), 'info');
+          this.asrSettings.enabled = false;
+          let source = await this.getAutoSource();
+          await this.sherpaDownload(source);
+          this.autoSaveSettings();
+          return;
+        }
+      }
       
       if (this.asrSettings.enabled) {
         await this.startASR();
@@ -7826,12 +7837,44 @@ handleCreateSlackSeparator(val) {
       
       // 先彻底停止
       await this.stopASR(); 
+
+      if (this.asrSettings.enabled === true && this.asrSettings.engine === 'sherpa'){
+        if (!this.sherpaModelExists){
+          showNotification(this.t('autoDownloadModel'), 'info');
+          this.asrSettings.enabled = false;
+          let source = await this.getAutoSource();
+          await this.sherpaDownload(source);
+          this.autoSaveSettings();
+          return;
+        }
+      }
       
       if (this.asrSettings.enabled) {
         // 给系统 200ms 时间回收资源
         await new Promise(resolve => setTimeout(resolve, 200));
         await this.startASR();
       }
+    },
+
+    async getAutoSource() {
+      try {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const isMainlandChinaTimezone = [
+          'Asia/Shanghai',
+          'Asia/Chongqing',
+          'Asia/Harbin',
+          'Asia/Urumqi'
+        ].includes(timezone);
+
+        const isChineseLanguage = navigator.language.startsWith('zh');
+
+        if (isMainlandChinaTimezone || isChineseLanguage) {
+          return 'modelscope';
+        }
+      } catch (e) {
+        console.error('Failed to detect locale', e);
+      }
+      return 'huggingface';
     },
 
     // 修改：启动ASR
@@ -8471,6 +8514,13 @@ handleCreateSlackSeparator(val) {
       if (this.ttsSettings.enabled === true && this.settings.enableOmniTTS === true) {
         this.settings.enableOmniTTS = false;
         showNotification(this.t('autoDisableOmniControlSettings'), 'warning');
+      }else if (this.ttsSettings.enabled === true && this.ttsSettings.engine === 'moss'){
+        if (!this.mossModelExists){
+          showNotification(this.t('autoDownloadModel'), 'info');
+          this.ttsSettings.enabled = false;
+          let source = await this.getAutoSource();
+          await this.mossDownload(source);
+        }
       }
       await this.autoSaveSettings();
     },
