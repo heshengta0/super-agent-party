@@ -200,3 +200,4 @@ runtime/
 nodejs/
 
 .agent/
+vts_token.txt

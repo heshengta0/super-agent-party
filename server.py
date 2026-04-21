@@ -3,6 +3,7 @@
 # 第一步：在加载任何沉重库之前，先搞定端口
 # ==========================================
 import signal
+import struct
 import sys
 import os
 import argparse
@@ -2161,23 +2162,6 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
                                 except Exception as e:
                                     print(f"读取技能文档失败: {e}")
 
-                # --- (3) 处理 '@' : 提取并注入文件内容 ---
-                # 使用 (?:^|\s) 防止把邮箱前缀误认为是文件路径，例如 "user@mail.com" 不会触发
-                file_matches = re.findall(r'(?:^|\s)@([\w\.\-\/\\]+)', user_text)
-                if file_matches:
-                    files_content_injected = []
-                    for file_path in set(file_matches):  # 使用 set 去重
-                        try:
-                            # 直接复用你原有的 read_file_tool_local 函数读取工作区文件
-                            file_res = await read_file_tool_local(file_path)
-                            files_content_injected.append(f"文件 `{file_path}` 的内容：\n```\n{file_res}\n```")
-                        except Exception as e:
-                            files_content_injected.append(f"读取文件 `{file_path}` 失败: {str(e)}")
-                    
-                    if files_content_injected:
-                        combined_files = "\n\n".join(files_content_injected)
-                        content_append(request.messages, 'system', f"\n\n📂 **The user has mentioned the following files using the '@' quick syntax, which have been automatically read for you.**:\n\n{combined_files}\n\nPlease refer to the content of the above document to answer the user's question.\n\n")
-
     if request.is_app_bot and request.platform:
         platform_message = f"\n\n用户正在使用 {request.platform} 软件与你交流\n\n"
         content_append(request.messages, 'system', platform_message)
@@ -2505,6 +2489,38 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
         )
 
         content_append(request.messages, 'system', Motion_messages)
+
+    # ==================== VTube Studio (VTS) 提示词注入 ====================
+    from py.vts_manager import vts_instance
+    
+    if vts_instance.is_running and not request.is_app_bot and not request.is_sub_agent:
+        
+        # 获取表情名和动作名
+        all_exp_names = [f"<{e['name']}>" for e in vts_instance.model_expressions]
+        all_mot_names = [f"<{h['name']}>" for h in vts_instance.available_hotkeys]
+        
+        # 获取当前状态（得益于刚才增加的 @property）
+        active_list = vts_instance.current_active_expressions
+        status_text = "、".join(active_list) if active_list else "平静"
+
+        if all_exp_names or all_mot_names:
+            vts_prompt = f"""
+\n\n# 人物表现控制
+你当前正在控制 Live2D 模型。当前表情状态：{status_text}。
+
+【可用表情标签】(发送即表示切换，并自动重置其他表情)
+{" ".join(all_exp_names)}
+
+【可用动作标签】(触发一次性动画)
+{" ".join(all_mot_names)}
+
+【使用规则】
+1. 每一句回复开头都可以插入一个标签。
+2. 表情标签是排他性的：如果你发送新的表情标签，系统会自动为你关闭旧表情。
+3. 标签必须放在句首，严禁换行。
+"""
+            content_append(request.messages, 'system', vts_prompt)
+
 
     # ==================== 好感度/数值系统注入 ====================
     love_settings = settings.get('loveSettings', {})
@@ -3467,6 +3483,9 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                 print("添加相关记忆：\n\n" + relevant_memories + "\n\n相关结束\n\n")
                 content_append(request.messages, 'system', "之前的相关记忆：\n\n" + relevant_memories + "\n\n相关结束\n\n")                   
         request = await tools_change_messages(request, settings)
+        # 如果系统消息为空字符串或者仅包含空白符，则将系统消息改成"you are a helpful assistant."
+        if request.messages[0]['role'] == 'system' and not request.messages[0]['content'].strip():
+            request.messages[0]['content'] = "you are a helpful assistant."
         chat_vendor = 'OpenAI'
         reasoner_vendor = 'OpenAI'
         for modelProvider in settings['modelProviders']: 
@@ -5698,6 +5717,9 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
         else:
             kb_list = []
         request = await tools_change_messages(request, settings)
+        # 如果系统消息为空字符串或者仅包含空白符，则将系统消息改成"you are a helpful assistant."
+        if request.messages[0]['role'] == 'system' and not request.messages[0]['content'].strip():
+            request.messages[0]['content'] = "you are a helpful assistant."
         chat_vendor = 'OpenAI'
         reasoner_vendor = 'OpenAI'
         for modelProvider in settings['modelProviders']: 
@@ -7995,18 +8017,99 @@ async def broadcast_to_vrm(self, message: Union[str, bytes]):
     for conn in disconnected:
         self.disconnect_vrm(conn)
 
+from py.vts_manager import vts_instance
+
 @app.websocket("/ws/tts")
 async def tts_websocket_endpoint(websocket: WebSocket):
     await tts_manager.connect_main(websocket)
     try:
         while True:
             msg = await websocket.receive()
-            # 透传所有数据，无论是 bytes 还是 text
+            
+            # 1. 处理二进制（音频流）
             if "bytes" in msg:
-                await tts_manager.broadcast_to_vrm(msg["bytes"])
+                data_bytes = msg["bytes"]
+                if len(data_bytes) > 4:
+                    try:
+                        json_len = struct.unpack('<I', data_bytes[:4])[0]
+                        metadata_bytes = data_bytes[4 : 4 + json_len]
+                        audio_file_bytes = data_bytes[4 + json_len :]
+                        
+                        if vts_instance.is_running and len(audio_file_bytes) > 0:
+                            import subprocess
+                            import imageio_ffmpeg  # 神器：自带免安装版 ffmpeg
+                            # ================= 终极解码方案 =================
+                            def decode_audio_to_pcm(b_data):
+                                # 获取 imageio_ffmpeg 自带的免安装 ffmpeg 路径
+                                ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+                                
+                                # 使用极速底层管道：输入任意格式字节流，输出 16-bit 24000Hz 单声道 PCM
+                                process = subprocess.Popen([
+                                    ffmpeg_exe,
+                                    '-i', 'pipe:0',       # 从标准输入读取 (就是我们的 b_data)
+                                    '-f', 's16le',        # 强制输出格式：16-bit signed little-endian PCM
+                                    '-ar', '24000',       # 强制采样率：24000Hz
+                                    '-ac', '1',           # 强制单声道
+                                    'pipe:1'              # 输出到标准输出
+                                ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                
+                                pcm_raw_bytes, _ = process.communicate(input=b_data)
+                                return pcm_raw_bytes
+                            # ===============================================
+
+                            # 异步线程执行，绝对不卡主线程
+                            pcm_raw_bytes = await asyncio.to_thread(decode_audio_to_pcm, audio_file_bytes)
+                            
+                            if pcm_raw_bytes:
+                                asyncio.create_task(vts_instance.drive_mouth(pcm_raw_bytes))
+                        
+                        # 转发给前端VRM
+                        await tts_manager.broadcast_to_vrm(data_bytes)
+                        
+                    except Exception as e:
+                        logging.error(f"万能音频解码出错: {e}")
+            
+            # 2. 处理文本（指令/表情）
             elif "text" in msg:
-                await tts_manager.broadcast_to_vrm(msg["text"])
-    except WebSocketDisconnect:
+                try:
+                    payload = json.loads(msg["text"]) 
+                    msg_type = payload.get("type")
+                    
+                    if msg_type == "startVTS_Driver":
+                        # 1. 获取连接结果
+                        success = await vts_instance.connect(payload.get("data", {}))
+                        
+                        # 2. 将结果反馈给前端
+                        feedback = {
+                            "type": "vts_connection_status",
+                            "data": {
+                                "success": success,
+                                "message": "Connected to VTube Studio" if success else "Failed to connect. Please make sure VTube Studio is running and the API is enabled."
+                            }
+                        }
+                        await websocket.send_text(json.dumps(feedback))
+                        
+                    elif msg_type == "stopVTS_Driver":
+                        await vts_instance.stop()
+                        # 停止也可以发一个反馈
+                        await websocket.send_text(json.dumps({
+                            "type": "vts_connection_status",
+                            "data": {"success": False, "message": "VTS Disconnected"}
+                        }))
+                    elif msg_type == "startSpeaking":
+                        if vts_instance.is_running:
+                            data_content = payload.get("data", {})
+                            expressions = data_content.get("expressions",[])
+                            for exp in expressions:
+                                asyncio.create_task(vts_instance.trigger_hotkey(exp))
+
+                    await tts_manager.broadcast_to_vrm(msg["text"])
+                except Exception as e:
+                    logging.error(f"[PY] WS Text Error: {e}")
+
+    except Exception as e:
+        logging.error(f"[PY] WS Global Error: {e}")
+    finally:
         tts_manager.disconnect_main(websocket)
 
 @app.websocket("/ws/vrm")
@@ -8038,12 +8141,12 @@ async def subtitles_websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         tts_manager.disconnect_overlay(websocket)
 
+# 修改状态接口，让前端也能感知 VTS 是否连接（虽然不影响静音判断）
 @app.get("/tts/status")
 async def get_tts_status():
-    """获取连接状态：Vue 前端会调用这个来决定是否静音"""
     return {
-        # 重要：Vue 只根据 vrm_connections 的数量来判断是否静音浏览器
         "vrm_connections": len(tts_manager.vrm_connections),
+        "vts_active": vts_instance.is_running, # 新增
         "overlay_connections": len(tts_manager.overlay_connections),
         "main_connections": len(tts_manager.main_connections)
     }
@@ -10973,7 +11076,14 @@ async def websocket_endpoint(websocket: WebSocket):
         
         # 3. 消息处理循环
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+            except RuntimeError as e:
+                # ✨ 核心修复：捕获“接收已断开连接的消息”错误
+                if "receive" in str(e):
+                    break # 退出循环
+                raise e # 其他运行时错误继续抛出
+            
             msg_type = data.get("type")
             
             if msg_type == "ping":

@@ -34,3 +34,4 @@ static/ext/*
 /dist/
 
 .agent/
+vts_token.txt

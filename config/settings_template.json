@@ -582,6 +582,7 @@
     "stickerPacks": [],
     "currentLanguage": "zh-CN",
     "isBtnCollapse": true,
+    "showHistorySidebar":true,
     "is_sandbox": false,
     "showBrowserChat": false,
     "searchEngine": "party",
