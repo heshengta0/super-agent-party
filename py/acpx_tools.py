@@ -46,10 +46,10 @@ def _get_acpx_command() -> list[str]:
 
     # 3. Docker environment
     if os.environ.get("IS_DOCKER"):
-        for npm_root in ["/usr/local/lib/node_modules", "/usr/lib/node_modules"]:
+        for npm_root in["/usr/local/lib/node_modules", "/usr/lib/node_modules"]:
             acpx_js = Path(npm_root) / "acpx" / "bin" / "acpx.js"
             if acpx_js.exists():
-                return ["node", str(acpx_js)]
+                return["node", str(acpx_js)]
 
     # 4. Global npm installation
     try:
@@ -67,7 +67,7 @@ def _get_acpx_command() -> list[str]:
 
     # Common paths
     home = Path.home()
-    for p in [
+    for p in[
         Path("/usr/local/lib/node_modules/acpx/bin/acpx.js"),
         Path("/opt/homebrew/lib/node_modules/acpx/bin/acpx.js"),
     ]:
@@ -83,7 +83,7 @@ def _get_acpx_command() -> list[str]:
 
     # 5. npx fallback
     if shutil.which("npx"):
-        return ["npx", "acpx@latest"]
+        return["npx", "acpx@latest"]
 
     raise RuntimeError("acpx not found. Run: npm install -g acpx@latest")
 
@@ -99,6 +99,15 @@ ACPM_AGENT_MAP = {
     "qwen": "qwen",
     "opencode": "opencode",
     "openclaw": "openclaw",
+    "pi": "pi",
+    "droid": "droid",
+    "iflow": "iflow",
+    "kilocode": "kilocode",
+    "kimi": "kimi",
+    "kiro": "kiro",
+    "qoder": "qoder",
+    "trae": "trae",
+    "goose": "goose",
 }
 
 # ==================== Permission Mode Configuration (Per-Agent) ====================
@@ -109,9 +118,6 @@ ACPM_AGENT_MAP = {
 #   auto-approve - Allow writes, deny destructive ops (delete, force push, etc.)
 #   yolo         - Bypass all permissions, full autonomy
 #   cowork       - Same as yolo, full autonomy for collaborative work
-#
-# Each agent's adapter defines its own set-mode IDs.
-# We map each abstract mode to the adapter-specific string + acpx global flag.
 
 AGENT_PERMISSION_CONFIG = {
     "claude": {
@@ -241,7 +247,151 @@ AGENT_PERMISSION_CONFIG = {
             "yolo":         "--approve-all",
             "cowork":       "--approve-all",
         },
-    },    
+    },
+    "pi": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "droid": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "iflow": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "kilocode": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "kimi": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-accept",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "kiro": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "qoder": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "trae": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
+    "goose": {
+        "set_mode": {
+            "plan":         "plan",
+            "default":      "default",
+            "auto-approve": "auto-edit",
+            "yolo":         "yolo",
+            "cowork":       "yolo",
+        },
+        "global_flag": {
+            "plan":         "--deny-all",
+            "default":      None,
+            "auto-approve": "--approve-all",
+            "yolo":         "--approve-all",
+            "cowork":       "--approve-all",
+        },
+    },
 }
 
 
@@ -310,7 +460,7 @@ async def read_stream_chunks(
 
 async def read_stream_to_end(stream: asyncio.StreamReader) -> str:
     """Read entire stream, return as string. Used for stderr buffering."""
-    parts = []
+    parts =[]
     try:
         while True:
             chunk = await stream.read(4096)
@@ -363,7 +513,7 @@ async def acpx_agent(
 
     Args:
         prompt:      Instruction to send to the sub-agent
-        agent_name:  Agent name (claude/codex/gemini/cursor/copilot/qwen/opencode/openclaw)
+        agent_name:  Agent name (claude/codex/gemini/cursor/copilot/qwen/opencode/openclaw/pi/droid/iflow/kilocode/kimi/kiro/qoder/trae/goose)
         mode:        Permission mode (plan/default/auto-approve/yolo/cowork)
         cwd:         Working directory
         extra_env:   Extra environment variables dict
@@ -429,7 +579,7 @@ async def acpx_agent(
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # Step 2: Set session permission mode via set-mode
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    set_mode_cmd = acpx_cmd + [agent_id, "set-mode", set_mode_value]
+    set_mode_cmd = acpx_cmd +[agent_id, "set-mode", set_mode_value]
     try:
         set_mode_proc = await asyncio.create_subprocess_exec(
             *set_mode_cmd,

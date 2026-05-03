@@ -12276,52 +12276,72 @@ pre.sp-content.sp-code {
 
 
 /* ============================================================
-   🚀 移动端终极防滚动补丁 (锁定屏幕，仅允许消息区滚动)
+   桌面端侧边栏截断 & 展开按钮靠右问题
    ============================================================ */
 
-/* 1. 锁死 Body，引入 100dvh 解决浏览器地址栏导致的视口高度跳动 */
-html, body {
-  height: 100% !important;
-  height: 100dvh !important; /* 动态视口高度，完美避开 Safari 地址栏 */
-  width: 100vw !important;
-  position: fixed !important; /* 终极杀招：彻底切断移动端的页面拖拽橡皮筋效果 */
-  overflow: hidden !important;
-  margin: 0;
-  padding: 0;
+/* 1. 撤销上一个补丁对桌面端的误伤 (解除全局锁定) */
+@media (min-width: 769px) {
+  html, body {
+    position: static !important;
+    height: 100vh !important;
+  }
+  .el-main, .chat-wrapper {
+    overflow: visible !important;
+  }
 }
 
-/* 2. 锁死 Vue 根节点 */
-#app {
-  height: 100% !important;
-  width: 100% !important;
-  overflow: hidden !important;
-  display: flex;
-  flex-direction: column;
+/* 2. 修复侧边栏顶部的书签被截断：放弃负边距，采用安全内部排版 */
+.side-panel {
+  margin: 12px 12px 12px 0 !important; /* 去掉之前的负边距，回归正常 */
+  height: calc(100% - 24px) !important; /* 恢复正常高度 */
+  overflow: visible !important; 
 }
 
-/* 3. 锁死 Element Plus 的 Main 容器 */
-.el-main {
-  overflow: hidden !important; /* Element Plus 默认是 auto，会导致整个页面滑动，必须关掉 */
-  display: flex !important;
-  flex-direction: column !important;
-  padding: 0 !important;
+.vscode-tabs-header {
+  margin-top: 0 !important; 
+  margin-bottom: -1px !important; /* 紧紧贴合下方主体面板 */
+}
+
+/* 保证收起时严格隐藏，解决视觉残留 */
+.side-panel.collapsed {
+  overflow: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
   margin: 0 !important;
-  flex: 1;
-  min-height: 0;
 }
 
-/* 4. 严防水平溢出横向滑动 */
-.chat-wrapper {
-  width: 100%;
-  height: 100%;
-  overflow: hidden !important; 
+/* 3. 修复侧边栏收起时的“书签按钮”（展开把手）过于靠边的问题 */
+.resizer-collapsed-right {
+  right: 16px !important; /* 离开屏幕绝对右边缘，预留呼吸空间 */
+}
+.resizer-collapsed-left {
+  left: 16px !important;  /* 左侧也同理 */
 }
 
-/* 5. 确保只有消息列表等特定区域可以纵向滚动 */
-.messages-container,
-.side-panel-scroll,
-.history-list-container {
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch; /* 保持 iOS 丝滑滚动体验 */
+/* 既然离开了边缘，干脆把展开按钮升级为更圆润的“悬浮胶囊” */
+.browser-toggle-handle, 
+.browser-toggle-handle--left {
+  border-radius: 12px !important; /* 变成全圆角 */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important; /* 增加悬浮阴影 */
+}
+
+/* ============================================================
+   📱 移动端防滚动 (限制仅在手机端生效，绝对安全)
+   ============================================================ */
+@media (max-width: 768px) {
+  html, body {
+    height: 100% !important;
+    height: 100dvh !important;
+    width: 100vw !important;
+    position: fixed !important; /* 仅在手机端锁死屏幕，消灭橡皮筋拖拽 */
+    overflow: hidden !important;
+  }
+  .el-main, .chat-wrapper {
+    overflow: hidden !important; 
+  }
+  .messages-container, .side-panel-scroll, .history-list-container {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch; /* 保持 iOS 丝滑滚动体验 */
+  }
 }

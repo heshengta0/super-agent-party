@@ -9513,22 +9513,23 @@ function updateElement(el, rawMarkdown, formatFn) {
                             @change="autoSaveSettings" 
                             class="full-width-input"
                           >
-                            <el-option label="Claude Code" value="claude">
-                            </el-option>
-                            <el-option label="Codex CLI" value="codex">
-                            </el-option>
-                            <el-option label="Gemini CLI" value="gemini">
-                            </el-option>
-                            <el-option label="Qwen Code" value="qwen">
-                            </el-option>
-                            <el-option label="Cursor CLI" value="cursor">
-                            </el-option>
-                            <el-option label="GitHub Copilot" value="copilot">
-                            </el-option>
-                            <el-option label="OpenCode" value="opencode">
-                            </el-option>
-                            <el-option label="OpenClaw" value="openclaw">
-                            </el-option>
+                            <el-option label="Claude Code" value="claude"></el-option>
+                            <el-option label="OpenClaw" value="openclaw"></el-option>
+                            <el-option label="Codex CLI" value="codex"></el-option>
+                            <el-option label="Gemini CLI" value="gemini"></el-option>
+                            <el-option label="OpenCode" value="opencode"></el-option>
+                            <el-option label="Qwen Code" value="qwen"></el-option>
+                            <el-option label="Cursor CLI" value="cursor"></el-option>
+                            <el-option label="GitHub Copilot" value="copilot"></el-option>
+                            <el-option label="Pi Agent" value="pi"></el-option>
+                            <el-option label="Factory Droid" value="droid"></el-option>
+                            <el-option label="iFlow CLI" value="iflow"></el-option>
+                            <el-option label="Kilocode" value="kilocode"></el-option>
+                            <el-option label="Kimi CLI" value="kimi"></el-option>
+                            <el-option label="Kiro CLI" value="kiro"></el-option>
+                            <el-option label="Qoder CLI" value="qoder"></el-option>
+                            <el-option label="Trae CLI" value="trae"></el-option>
+                            <el-option label="Goose CLI" value="goose"></el-option>
                           </el-select>
                         </el-form-item>
 
@@ -14366,6 +14367,50 @@ function updateElement(el, rawMarkdown, formatFn) {
                         
                         <div class="tool-content">
 
+                            <!-- 角色卡选择 -->
+                            <el-form-item :label="t('memoryEnable')" class="form-item-align" label-position="left">
+                              <el-switch 
+                              v-model="memorySettings.is_memory" 
+                              @click.stop @change="changeMemory" 
+                              />
+                            </el-form-item>
+                            <el-form-item :label="t('selectMemory')">
+                              <el-select 
+                                v-model="memorySettings.selectedMemory" 
+                                :placeholder="t('selectMemoryPlaceholder')"
+                                class="full-width-input"
+                                @change ="changeMemory"
+                                >
+                                <el-option
+                                  v-for="memory in memories"
+                                  :key="memory.id"
+                                  :label="memory.name"
+                                  :value="memory.id"
+                                />
+                              </el-select>
+                            </el-form-item>
+                            <el-alert
+                              type="info"
+                              :closable="false"
+                              class="mb-2"
+                            >
+                              <template #default>
+                                <div class="alert-content">
+                                  {{ t('goToMemoryNotice1') }}
+                                  <el-link
+                                    type="primary"
+                                    :underline="false"
+                                    class="font-medium"
+                                    @click="switchToMemory"
+                                  >
+                                    <el-icon class="mr-1">
+                                      <i class="fa-solid fa-key"></i>
+                                    </el-icon>{{ t('memoryInterface') }}
+                                  </el-link>
+                                </div>
+                              </template>
+                            </el-alert>
+
                           <!-- URL 设置 -->
                           <el-form-item :label="t('vtsURL')" class="form-item-align">
                             <el-input
@@ -14527,46 +14572,6 @@ function updateElement(el, rawMarkdown, formatFn) {
                           </div>
                         </div>
                         <div class="tool-content">
-                            <!-- 主智能体选择 -->
-                            <el-form-item :label="t('mainAgent')" required>
-                              <el-select 
-                                v-model="mainAgent"
-                                @change="autoSaveSettings">
-                                <el-option
-                                  :label="t('defaultAgent')"
-                                  value="super-model"
-                                >
-                                </el-option>
-                                <el-option
-                                  v-for="(agent, id) in agents"
-                                  :key="id"
-                                  :label="agent.name"
-                                  :value="id"
-                                >
-                                </el-option>
-                              </el-select>
-                            </el-form-item>
-                            <el-alert
-                              type="info"
-                              :closable="false"
-                              class="mb-2"
-                            >
-                              <template #default>
-                                <div class="alert-content">
-                                  {{ t('goToMainAgentNotice1') }}
-                                  <el-link
-                                    type="primary"
-                                    :underline="false"
-                                    class="font-medium"
-                                    @click="switchToMainAgent"
-                                  >
-                                    <el-icon class="mr-1">
-                                      <i class="fa-solid fa-key"></i>
-                                    </el-icon>{{ t('MainAgentInterface') }}
-                                  </el-link>
-                                </div>
-                              </template>
-                            </el-alert>
                             <!-- 角色卡选择 -->
                             <el-form-item :label="t('memoryEnable')" class="form-item-align" label-position="left">
                               <el-switch 
@@ -16141,7 +16146,6 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                 <!-- 磁贴网格 -->
                 <div class="provider-grid">
-                  <!-- ✨ 循环改为 filteredManageExtensions ✨ -->
                   <div class="provider-card" v-for="extension in filteredManageExtensions" :key="extension.id">
                     <div class="card-header">
                       <el-tooltip :content="t('useExtension')" placement="top">
@@ -16150,6 +16154,11 @@ function updateElement(el, rawMarkdown, formatFn) {
                         </el-button>
                       </el-tooltip>
                       <div class="card-actions">
+                        <!-- 新增：如果有更新则显示更新小按钮 -->
+                        <el-tooltip v-if="extension.hasUpdate" :content="t('update')" placement="top">
+                          <el-button type="warning" circle size="small" @click.stop="updatePlugin(extension)"><i class="fa-solid fa-arrow-up"></i></el-button>
+                        </el-tooltip>
+                        
                         <el-tooltip :content="t('openExtensionInBrowser')" placement="top">
                           <el-button type="default" circle size="small" @click.stop="openExtension(extension)"><i class="fa-solid fa-external-link"></i></el-button>
                         </el-tooltip>
@@ -16164,7 +16173,12 @@ function updateElement(el, rawMarkdown, formatFn) {
                     <div class="kb-content">
                       <div class="kb-header"> 
                         <h3>{{ extension.name }}</h3>
-                        <el-tag type="info" size="small">v{{ extension.version }}</el-tag>                      
+                        <!-- 这里的版本号区域 -->
+                        <el-tag type="info" size="small">v{{ extension.version }}</el-tag>   
+                        <!-- 新增：可更新标签 -->                   
+                        <el-tag v-if="extension.hasUpdate" type="warning" size="small" style="margin-left: 6px;">
+                          {{ t('updateAvailable') || '可更新' }}
+                        </el-tag>
                       </div>
                       <p class="kb-description">{{ extension.author }}</p>
                       <div class="kb-meta"><p>{{ extension.description }}</p></div>
@@ -16242,25 +16256,31 @@ function updateElement(el, rawMarkdown, formatFn) {
                   </div>
                   
                   <div class="plugins-container">
-                    <!-- ✨ 这里改为判断 filteredRemotePlugins 的长度 ✨ -->
                     <div v-if="filteredRemotePlugins.length === 0" class="empty-plugins">
                       <el-empty :description="t('noExtensionsFound')"></el-empty>
                     </div>
                     <div v-else class="plugins-grid">
-                      <!-- ✨ 循环改为 filteredRemotePlugins ✨ -->
                       <div v-for="plugin in filteredRemotePlugins" :key="plugin.name" class="plugin-card">
                         <div class="plugin-content">
-                          <h4 class="plugin-name">{{ plugin.name }}</h4>
+                          <h4 class="plugin-name">
+                            {{ plugin.name }}
+                            <!-- 新增：可更新标签 -->
+                            <el-tag v-if="plugin.hasUpdate" type="warning" size="small" style="margin-left: 8px;">
+                              {{ t('updateAvailable') || '可更新' }}
+                            </el-tag>
+                          </h4>
                           <p class="plugin-description">{{ plugin.description }}</p>
                         </div>
                         <div class="plugin-action">
                           <el-button v-if="plugin.repository" type="primary" @click="openRepository(plugin.repository)" class="repo-button">
                             <i class="fa-brands fa-github"></i>{{ t('viewRepository') }}
                           </el-button>
+                          
                           <el-button v-if="plugin.installed" type="warning" :loading="plugin._updating" @click="updatePlugin(plugin)">
                             {{ t('update') }}
                           </el-button>
-                          <el-button :loading="installLoading&&!plugin.installed" :type="plugin.installed ? 'danger' : 'primary'" @click="togglePlugin(plugin)">
+                          
+                          <el-button :loading="installLoading && !plugin.installed" :type="plugin.installed ? 'danger' : 'primary'" @click="togglePlugin(plugin)">
                             {{ plugin.installed ? t('uninstall'): t('install') }}
                           </el-button>
                         </div>

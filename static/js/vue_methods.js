@@ -1944,7 +1944,6 @@ let vue_methods = {
       }
       else if (data.type === 'settings') {
           this.ensureConversationGroups();
-          this.loadConversation(this.conversationId);
           this.isdocker = data.data.isdocker || false;
           this.settings = {
             model: data.data.model || '',
@@ -2030,6 +2029,7 @@ let vue_methods = {
               return existingButton;
             });
           }
+          this.loadConversation(this.conversationId);
           this.currentLanguage = data.data.currentLanguage || this.currentLanguage;
           this.mcpServers = data.data.mcpServers || this.mcpServers;
           this.a2aServers = data.data.a2aServers || this.a2aServers;
@@ -2684,7 +2684,18 @@ let vue_methods = {
         const latestUserMessage = [...this.messages].reverse().find(msg => msg.role === 'user');
 
         const getBlock = (type, id = null, name = null) => {
-            if (!currentMsg.displayBlocks) currentMsg.displayBlocks = [];
+            if (!currentMsg.displayBlocks) currentMsg.displayBlocks =[];
+            
+            // 【核心修复】：如果有明确的 ID，先全局查找是否已经有这个块。
+            // 解决大模型穿插输出文字，导致 tool_call/tool_result 块不再是最后一块而被误当成新块的问题。
+            if (id) {
+                const existingBlock = currentMsg.displayBlocks.find(b => b.type === type && b.id === id);
+                if (existingBlock) {
+                    if (name && !existingBlock.name) existingBlock.name = name;
+                    return existingBlock;
+                }
+            }
+
             let last = currentMsg.displayBlocks[currentMsg.displayBlocks.length - 1];
             const canReuse = last && last.type === type && (!id || last.id === id);
             if (canReuse) {
@@ -2991,8 +3002,19 @@ let vue_methods = {
                                     }
                                 }
                             } else {
-                                const bType = tool.type === 'error' ? 'error' : 'tool_result';
-                                getBlock(bType, toolCallId, toolName).content = tool.content;
+                                // 【核心修复】：分离 tool_call 和 tool_result，不要把 call 强行转成 result
+                                let bType = 'tool_result';
+                                if (tool.type === 'error') bType = 'error';
+                                else if (tool.type === 'call') bType = 'tool_call'; // 还原它本身的身份
+
+                                const targetBlock = getBlock(bType, toolCallId, toolName);
+                                
+                                // 根据类型，放入对应的字段中 (call 是放入 args，result 是放入 content)
+                                if (tool.type === 'call') {
+                                    targetBlock.args = tool.content; 
+                                } else {
+                                    targetBlock.content = tool.content;
+                                }
 
                                 if (this.isThinkOpen) { 
                                     currentMsg.content += '</div></div>\n\n'; 
@@ -3002,9 +3024,8 @@ let vue_methods = {
                                 const isCallAlreadyRendered = (tool.type === 'call' && currentMsg.content.includes(`id="${blockId}"`));
 
                                 if (!isCallAlreadyRendered) {
-                                    
-                                  let blockClass = (tool.type === 'error') ? 'type-error' : 'type-result';
-                                  let iconClass = (tool.type === 'error') ? 'fa-xmark' : 'fa-check';
+                                  let blockClass = (tool.type === 'error') ? 'type-error' : (tool.type === 'call' ? 'type-call' : 'type-result');
+                                  let iconClass = (tool.type === 'error') ? 'fa-xmark' : (tool.type === 'call' ? 'fa-wrench' : 'fa-check');
                                   let uiTitle = tool.type === 'call' ? `${this.t('call')} ${tool.title}` : (tool.title || 'Result');
 
                                   let html = `\n<div class="sap-process-block ${blockClass}" id="${blockId}">`;
@@ -16475,7 +16496,7 @@ handleSkillsPolling(activeMenu, menu, tab) {
       console.log('已停止轮询 Skills');
     }
   },
-  // 核心逻辑：判断并控制扩展页面的轮询
+// 核心逻辑：判断并控制扩展页面的轮询
   handleExtensionsPolling(menu, sub) {
     if (menu === 'api-group' && sub === 'extension') {
       this.startExtensionsPolling();
@@ -16486,7 +16507,7 @@ handleSkillsPolling(activeMenu, menu, tab) {
 
   // 启动扩展轮询
   startExtensionsPolling() {
-    if (this.extensionsPollingTimer) return; // 避免重复启动
+    if (this.extensionsPollingTimer) return;
     
     // 立即执行一次刷新
     this.scanExtensions(); 
@@ -16506,7 +16527,7 @@ handleSkillsPolling(activeMenu, menu, tab) {
     }
   },
 
-  // 修改原来的 scanExtensions，确保它能正常工作
+  // 刷新扩展列表，并在之后对比版本状态
   async scanExtensions() {
     try {
       const response = await fetch('/api/extensions/list');
@@ -16514,22 +16535,62 @@ handleSkillsPolling(activeMenu, menu, tab) {
       const data = await response.json();
       this.extensions = data.extensions;
       
-      // 如果此时弹窗是打开的，可能还需要刷新远程插件状态以同步“已安装”按钮
-      if (this.showExtensionForm) {
-        this.updateRemotePluginsStatus(); 
-      }
+      // 同步本地与远程的“已安装”和“可更新”状态
+      this.syncExtensionUpdateStatus();
     } catch (e) {
       console.error('刷新扩展列表失败', e);
     }
   },
   
-  // 辅助方法：对比本地和远程，更新 UI 上的“安装/卸载”状态
-  updateRemotePluginsStatus() {
-    if (!this.remotePlugins) return;
-    this.remotePlugins = this.remotePlugins.map(r => ({
-      ...r,
-      installed: this.extensions.some(l => l.repository.trim() === r.repository.trim()),
-    }));
+  // 辅助方法：对比本地和远程，同步更新状态
+  syncExtensionUpdateStatus() {
+    if (!this.extensions || !this.remotePlugins) return;
+
+    // 1. 遍历远程列表，标记 "installed" 和 "hasUpdate" 状态
+    this.remotePlugins = this.remotePlugins.map(r => {
+      const local = this.extensions.find(l => 
+          (l.repository && r.repository && l.repository.trim().toLowerCase() === r.repository.trim().toLowerCase()) || 
+          (l.id && r.id && l.id === r.id)
+      );
+      let installed = !!local;
+      let hasUpdate = false;
+      
+      if (local && local.version && r.version) {
+        if (this.compareVersions(local.version, r.version) < 0) {
+          hasUpdate = true;
+        }
+      }
+      return { ...r, installed, hasUpdate };
+    });
+
+    // 2. 遍历本地列表，标记 "hasUpdate" 状态
+    this.extensions = this.extensions.map(l => {
+      const remote = this.remotePlugins.find(r => 
+          (l.repository && r.repository && l.repository.trim().toLowerCase() === r.repository.trim().toLowerCase()) || 
+          (l.id && r.id && l.id === r.id)
+      );
+      let hasUpdate = false;
+      if (remote && l.version && remote.version) {
+        if (this.compareVersions(l.version, remote.version) < 0) {
+          hasUpdate = true;
+        }
+      }
+      return { ...l, hasUpdate };
+    });
+  },
+
+  // 辅助方法：语义化版本比较
+  compareVersions(v1, v2) {
+    if (!v1 || !v2) return 0;
+    const parts1 = v1.toString().replace(/[^0-9.]/g, '').split('.').map(Number);
+    const parts2 = v2.toString().replace(/[^0-9.]/g, '').split('.').map(Number);
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const num1 = parts1[i] || 0;
+      const num2 = parts2[i] || 0;
+      if (num1 < num2) return -1;
+      if (num1 > num2) return 1;
+    }
+    return 0;
   },
 // 预览技能
 async previewSkill(id) {
