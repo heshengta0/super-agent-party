@@ -361,7 +361,7 @@ if (globalConfig?.chromeMCPSettings?.type === 'internal' && globalConfig?.chrome
   IS_INTERNAL_MODE_ACTIVE = true;
   console.log('[CDP] 已请求系统自动分配内置浏览器调试端口...');
 }
-
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096'); // 允许使用 4GB 内存
 // 新增：检测端口是否可用
 function isPortAvailable(port) {
   return new Promise((resolve) => {
