@@ -40,6 +40,9 @@
 #### Desktop Companion: Supports custom VRM models, actions, 3D scenes, and is compatible with [live2D extensions](https://github.com/heshengtao/sap-live2d)
 ![image](doc/image/img-2/cover.jpeg)
 
+#### Link VTS: Control Live2D models in Vtube Studio, supporting custom actions and expression control
+![image](doc/image/img-2/vts.jpeg)
+
 #### Task Center: Enable your AI agents to perform any advanced tasks in the background, automatically control your computer to get work done, supporting MCP and Agent Skills.
 ![image](doc/image/img-2/task.jpeg)
 
@@ -216,6 +219,7 @@ Added a brand-new extension system. You can check available plugins at [plugins 
 | Code Server      | heshengtao  | IDE extension for Super Agent Party          | https://github.com/heshengtao/sap-code-server  |
 | CLI      | heshengtao  |  CLI extension for Super Agent Party           | https://github.com/heshengtao/sap-cli  |
 | LX-music      | heshengtao  | Connect super agent party to LX Music API, let AI companion control music playback! | https://github.com/heshengtao/sap-lx-music  |
+| AI PPT      | heshengtao  | AI PPT extension for Super Agent Party           | https://github.com/heshengtao/sap-ai-ppt  |
 
 ## Hardware requirements
 

@@ -39,6 +39,9 @@
 #### デスクトップコンパニオン：カスタムVRMモデル、アクション、3Dシーンをサポートし、[live2D拡張](https://github.com/heshengtao/sap-live2d)にも対応しています。
 ![image](doc/image/img-2/cover.jpeg)
 
+#### Link VTS: Vtube StudioでLive2Dモデルを制御し、カスタムアクションや表情コントロールをサポート
+![image](doc/image/img-2/vts.jpeg)
+
 #### タスクセンター：AIエージェントにバックグラウンドで高度なタスクを実行させ、自動的にコンピュータを制御して作業を完了させます。MCPとAgent Skillsに対応。
 ![image](doc/image/img-2/task.jpeg)
 
@@ -205,6 +208,7 @@ chmod +x 一键更新(update).sh 一键启动(start).sh
 | Code Server      | heshengtao  | Super Agent Party用のIDE拡張機能          | https://github.com/heshengtao/sap-code-server  |
 | CLI      | heshengtao  |  Super Agent Party用CLI拡張機能          | https://github.com/heshengtao/sap-cli  |
 | LX-music      | heshengtao  | super agent party を LX Music API に接続し、AI パートナーが音楽再生を操作できるようにします！ | https://github.com/heshengtao/sap-lx-music  |
+| AI PPT      | heshengtao  | Super Agent Party 向けの AI PPT 拡張プラグイン          | https://github.com/heshengtao/sap-ai-ppt  |
 
 ## ハードウェア要件
 
