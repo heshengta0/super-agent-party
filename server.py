@@ -375,7 +375,7 @@ import aiofiles
 import argparse
 from py.dify_openai import DifyOpenAIAsync
 from py.ClaudeAsOpenAI import AsyncClaudeAsOpenAI
-
+from py.GeminiAsOpenAI import AsyncGeminiAsOpenAI
 from py.get_setting import EXT_DIR, IS_DOCKER, SKILLS_DIR, _copy_default_skills, convert_to_opus_simple, load_covs, load_settings, save_covs,save_settings,clean_temp_files_task,base_path,configure_host_port,UPLOAD_FILES_DIR,AGENT_DIR,MEMORY_CACHE_DIR,KB_DIR,DEFAULT_VRM_DIR,USER_DATA_DIR,LOG_DIR,TOOL_TEMP_DIR,COVS_PATH
 from py.llm_tool import get_image_base64,get_image_media_type
 timetamp = time.time()
@@ -651,6 +651,8 @@ def get_client_class(config, provider_id):
         return DifyOpenAIAsync 
     elif vendor == 'customAnthropic':
         return AsyncClaudeAsOpenAI
+    elif vendor == 'Gemini':
+        return AsyncGeminiAsOpenAI
     else: 
         return AsyncOpenAI
 
@@ -1027,7 +1029,7 @@ async def call_node_extension_tool(ext_id: str, tool_name: str, tool_params: dic
         if call_id in mcp_call_results:
             del mcp_call_results[call_id]
 
-async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> str | List | AsyncIterator[str] | None :
+async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub_agent:bool=False) -> str | List | AsyncIterator[str] | None :
     global mcp_client_list,_TOOL_HOOKS,HA_client,ChromeMCP_client,sql_client, node_ext_mcp_clients, node_ext_mcp_tools
     print("dispatch_tool",tool_name,tool_params)
     
@@ -1320,6 +1322,11 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
                 is_allowed = True
                 print(f"[Permission] Tool '{tool_name}' allowed by project config.")
 
+
+        # --- 规则 E: 如果是子智能体，且不被允许，直接返回拒绝 ---
+        if not is_allowed and is_sub_agent:
+            return "permission_denied"
+        
         # --- 最终判定 ---
         if not is_allowed:
             # 返回前端特定的 JSON 结构，触发审批 UI
@@ -4541,7 +4548,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                                 }
                             results = f"{response_content.name}tool has been successfully launched. It will take some time to run, and the results will be provided in the next round of conversation." # 保持原样
                         else:
-                            results = await dispatch_tool(response_content.name, first_arg, settings)
+                            results = await dispatch_tool(response_content.name, first_arg, settings,request.is_sub_agent)
 
                         if results is None:
                             # 保持原样，但建议加上 ID
@@ -6789,18 +6796,46 @@ async def get_agents():
 class ProviderModelRequest(BaseModel):
     url: str
     api_key: str
+    vendor: Optional[str] = None  # 可选字段，用于指定供应商
 
 @app.post("/v1/providers/models")
 async def fetch_provider_models(request: ProviderModelRequest):
     try:
-        # 使用传入的provider配置创建AsyncOpenAI客户端
-        client = AsyncOpenAI(api_key=request.api_key, base_url=request.url)
-        # 获取模型列表
+        global global_http_client
+        vendor = getattr(request, 'vendor', None)
+        print(f"Fetching models from provider: {vendor} at URL: {request.url}")
+        # 1. 拦截 Claude
+        if vendor == 'customAnthropic':
+            client = AsyncClaudeAsOpenAI(
+                api_key=request.api_key, 
+                base_url=request.url,
+                http_client=global_http_client
+            )
+        # 2. 拦截 Gemini
+        elif vendor == 'Gemini':
+            client = AsyncGeminiAsOpenAI(
+                api_key=request.api_key,
+                base_url=request.url,
+                http_client=global_http_client
+            )
+        # 3. 拦截 Dify
+        elif vendor == 'Dify':
+            client = DifyOpenAIAsync(
+                api_key=request.api_key, 
+                base_url=request.url,
+                http_client=global_http_client
+            )
+        # 4. 兜底走到标准 OpenAI
+        else:
+            client = AsyncOpenAI(
+                api_key=request.api_key, 
+                base_url=request.url,
+                http_client=global_http_client
+            )
+
         model_list = await client.models.list()
-        # 提取模型ID并返回
-        return JSONResponse(content={"data": [model.id for model in model_list.data]})
+        return JSONResponse(content={"data":[model.id for model in model_list.data]})
     except Exception as e:
-        # 处理异常，返回错误信息
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/chat/completions", operation_id="chat_with_agent_party")

@@ -287,7 +287,7 @@ let vue_methods = {
       this.stopGenerate();
       await this.sendMessage();
     }else{
-      this.messages[this.editIndex].content = this.editContent; // 更新this.editIndex对应的消息内容
+      // this.messages[this.editIndex].pure_content = this.editContent; // 更新this.editIndex对应的消息内容
     }
     await this.autoSaveSettings();
   },
@@ -2802,6 +2802,14 @@ let vue_methods = {
                             // 缓冲文本，不再直接操作 DOM
                             this._streamTextBuffer += delta.content;
 
+                            // 【核心修复】：将文本同步存入 backend_content，防止多轮对话历史被过滤抛弃
+                            const lastBackend = currentMsg.backend_content[currentMsg.backend_content.length - 1];
+                            if (lastBackend && lastBackend.role === 'assistant') {
+                                lastBackend.content = (lastBackend.content || '') + delta.content;
+                            } else {
+                                currentMsg.backend_content.push({ role: 'assistant', content: delta.content });
+                            }
+
                             // 为 TTS 即时处理
                             const parts = delta.content.split('```');
                             for (let i = 0; i < parts.length; i++) {
@@ -2940,13 +2948,18 @@ let vue_methods = {
                                 let rawContent = tool.content || '';
                                 if (tool.type === 'call') {
                                     let last = currentMsg.backend_content[currentMsg.backend_content.length - 1];
+                                    const actualArgs = rawContent || "{}"; // 提取真实的参数
+                                    
                                     if (last.role === 'assistant') {
-                                        if (!last.tool_calls) last.tool_calls = [];
-                                        if (!last.tool_calls.some(tc => tc.id === toolCallId)) {
-                                            last.tool_calls.push({ id: toolCallId, type: 'function', function: { name: tool.title, arguments: "{}" } });
+                                        if (!last.tool_calls) last.tool_calls =[];
+                                        let existingCall = last.tool_calls.find(tc => tc.id === toolCallId);
+                                        if (!existingCall) {
+                                            last.tool_calls.push({ id: toolCallId, type: 'function', function: { name: tool.title, arguments: actualArgs } });
+                                        } else {
+                                            existingCall.function.arguments = actualArgs; // 覆盖占位符，更新为真实参数
                                         }
                                     } else {
-                                        currentMsg.backend_content.push({ role: 'assistant', content: null, tool_calls: [{ id: toolCallId, type: 'function', function: { name: tool.title, arguments: "{}" } }] });
+                                        currentMsg.backend_content.push({ role: 'assistant', content: null, tool_calls:[{ id: toolCallId, type: 'function', function: { name: tool.title, arguments: actualArgs } }] });
                                     }
                                 } else if (tool.type === 'tool_result' || tool.type === 'tool_result_stream' || tool.type === 'error') {
                                     const hide = this.toolsSettings?.hideToolResults?.enabled && tool.type === 'tool_result';
@@ -4446,6 +4459,7 @@ let vue_methods = {
     },
     async fetchModelsForProvider(provider) {
       try {
+        console.log('Fetching models for provider:', provider.vendor);
         const response = await fetch(`/v1/providers/models`, {
           method: 'POST',
           headers: {
@@ -4453,7 +4467,8 @@ let vue_methods = {
           },
           body: JSON.stringify({
             url: provider.url,
-            api_key: provider.apiKey
+            api_key: provider.apiKey,
+            vendor: provider.vendor
           })
         });
         if (!response.ok) {
@@ -4537,7 +4552,7 @@ let vue_methods = {
         'ttswebui': this.isdocker ? 'http://host.docker.internal:7778/v1' : 'http://127.0.0.1:7778/v1',
         'SGLang': this.isdocker ? 'http://host.docker.internal:3000/v1' : 'http://127.0.0.1:3000/v1', 
         'llama.cpp': this.isdocker ? 'http://host.docker.internal:8080/v1' : 'http://127.0.0.1:8080/v1',
-        'Gemini': 'https://generativelanguage.googleapis.com/v1beta/openai',
+        'Gemini': 'https://generativelanguage.googleapis.com',
         'Anthropic': 'https://api.anthropic.com/v1',
         'Grok': 'https://api.groq.com/openai/v1',
         'mistral': 'https://api.mistral.ai/v1',

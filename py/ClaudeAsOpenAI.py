@@ -37,6 +37,63 @@ class AsyncClaudeAsOpenAI:
             # litellm.suppress_debug_info = True
         return self._litellm_module
 
+    @property
+    def models(self):
+        return self._ModelsResource(self)
+
+    class _ModelsResource:
+        def __init__(self, parent: "AsyncClaudeAsOpenAI"):
+            self._parent = parent
+
+        async def list(self):
+            # 构造兼容 OpenAI 返回形式的对象
+            class ModelItem:
+                def __init__(self, model_id: str):
+                    self.id = model_id
+
+            class ModelList:
+                def __init__(self, data: list):
+                    self.data = data
+
+            # 处理请求 URL，Anthropic 的获取模型接口通常是 /v1/models
+            base_url = self._parent.base_url or "https://api.anthropic.com"
+            if base_url.endswith("/v1") or base_url.endswith("/v1/"):
+                url = f"{base_url.rstrip('/')}/models"
+            else:
+                url = f"{base_url.rstrip('/')}/v1/models"
+
+            headers = {
+                "x-api-key": self._parent.api_key,
+                "anthropic-version": "2023-06-01"
+            }
+
+            try:
+                # 优先复用全局 http_client 以走系统代理配置
+                client = self._parent.http_client
+                need_close = False
+                if not client:
+                    client = httpx.AsyncClient()
+                    need_close = True
+
+                response = await client.get(url, headers=headers)
+                
+                if need_close:
+                    await client.aclose()
+
+                # 如果 API 成功响应
+                if response.status_code == 200:
+                    data = response.json()
+                    # 解析官方格式: {"type": "list", "data":[{"id": "claude-3-opus-...", ...}]}
+                    models = [ModelItem(m["id"]) for m in data.get("data",[])]
+                    if models:
+                        return ModelList(models)
+            except Exception as e:
+                print(f"动态获取 Anthropic 模型列表失败 (可能代理/代理商不支持): {e}")
+
+            # [静态兜底方案]：如果请求报错或代理商 API 未实现 /models 端点，返回常见的 Claude 模型
+            fallback_models =[]
+            return ModelList([ModelItem(m) for m in fallback_models])
+
     def _convert_tools(self, tools: Optional[List[Dict]]) -> Optional[List[Dict]]:
         """OpenAI Tools -> Claude Tools"""
         if not tools:

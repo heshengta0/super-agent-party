@@ -1242,6 +1242,16 @@ const app = Vue.createApp({
   },
   computed: {
 
+    getEiditDialogTitle() {
+      if (this.editType === 'system'){
+        return this.t('editSystemPrompt');
+      }else if (this.editType === 'user'){
+        return this.t('editMessage');
+      }else{
+        return this.t('viewOriginalMessage');
+      }
+    },
+
     // ✨ 新增：主页面扩展列表过滤逻辑 ✨
     filteredManageExtensions() {
       if (!this.searchManageExtensionQuery) {

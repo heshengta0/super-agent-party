@@ -805,6 +805,41 @@ function updateElement(el, rawMarkdown, formatFn) {
 
           <!-- 引导卡片矩阵 (瀑布流布局) -->
           <div class="guide-grid">
+            <!-- 1. 开始对话 -->
+            <div class="guide-card" @click="activeMenu = 'home'">
+              <div class="card-icon blue"><i class="fa-solid fa-comment"></i></div>
+              <div class="card-info">
+                <h3>{{ t('startChatting') }}</h3>
+              </div>
+            </div>
+
+            <!-- 2. 召唤伴侣 -->
+            <div class="guide-card" @click="startVRM">
+              <div class="card-icon pink"><i class="fa-solid fa-user-ninja"></i></div>
+              <div class="card-info">
+                <h3>{{ t('summonCompanion') }}</h3>
+              </div>
+            </div>
+
+            <!-- 5. 创建新任务 -->
+            <div class="guide-card" @click="createNewTask">
+              <div class="card-icon cyan"><i class="fa-solid fa-list-check"></i></div>
+              <div class="card-info">
+                <h3>{{ t('createNewTask') || '创建新任务' }}</h3>
+              </div>
+            </div>
+
+            <!-- 收藏的扩展卡片动态渲染 -->
+            <div v-for="ext in favoriteExtensions" :key="ext.id" class="guide-card extension" @click="openExtensionInWindow(ext)">
+              <div class="card-icon purple"><i class="fa-solid fa-puzzle-piece"></i></div>
+              <div class="card-info">
+                <h3>{{ ext.name }}</h3>
+              </div>
+              <div class="fav-star active" @click.stop="toggleFavoriteExtension(ext)">
+                <i class="fa-solid fa-star"></i>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -1086,60 +1121,65 @@ function updateElement(el, rawMarkdown, formatFn) {
                             <div v-else-if="message.displayBlocks && message.displayBlocks.length > 0" class="message-blocks-container">
                                 <template v-for="(block, bIndex) in getVisibleBlocks(message)" :key="'blk-'+bIndex">
                                     
-                                  <!-- 1. 深度思考块 (Reasoning) -->
-                                  <div v-if="block.type === 'reasoning'" class="sap-process-block type-reasoning">
-                                      <div class="sp-header"><i class="fa-solid fa-brain"></i> {{ t('thinking') }}</div>
-                                      <div class="sp-content" v-morph:format="block.content"></div>
-                                  </div>
+                                    <!-- 如果是最后一个块且消息未完成，或者不是工具类块，正常渲染 -->
+                                    <template v-if="(message.displayBlocks.length > 0 && block === message.displayBlocks[message.displayBlocks.length - 1] && !message.generationFinished) || !isToolBlock(block)">
+                                        <!-- 这里保留你原来的所有类型的完整渲染代码 -->
+                                        <!-- 1. 深度思考块 -->
+                                        <div v-if="block.type === 'reasoning'" class="sap-process-block type-reasoning">
+                                            <div class="sp-header"><i class="fa-solid fa-brain"></i> {{ t('thinking') }}</div>
+                                            <div class="sp-content" v-morph:format="block.content"></div>
+                                        </div>
 
+                                        <!-- 文本块 -->
+                                        <div v-else-if="block.type === 'text'" class="a2ui-text-wrapper">
+                                            <template v-for="(segment, sIdx) in splitMessageContent(block.content)" :key="sIdx">
+                                                <div v-if="segment.type === 'text'" v-morph:format="segment.content" style="display: inline-block; width: 100%;"></div>
+                                                <a2-u-i-renderer v-else-if="segment.type === 'ui'" :config="segment.content" @action="handleA2UIAction"></a2-u-i-renderer>
+                                            </template>
+                                        </div>
 
-                                  <!-- 文本块 -->
-                                  <div v-else-if="block.type === 'text'" class="a2ui-text-wrapper">
-                                      <template v-for="(segment, sIdx) in splitMessageContent(block.content)" :key="sIdx">
-                                          <!-- 这里的 v-morph:format="segment.content" 会随着 block.content 的变化而实时重新渲染 Markdown -->
-                                          <div v-if="segment.type === 'text'" 
-                                              v-morph:format="segment.content" 
-                                              style="display: inline-block; width: 100%;">
-                                          </div>
-                                          <a2-u-i-renderer v-else-if="segment.type === 'ui'" :config="segment.content" @action="handleA2UIAction"></a2-u-i-renderer>
-                                      </template>
-                                  </div>
+                                        <!-- 工具调用 -->
+                                        <div v-else-if="block.type === 'tool_call'" class="sap-process-block type-call" :id="'tool-call-'+block.id">
+                                            <div class="sp-header"><i class="fa-solid fa-wrench"></i> {{ t('call') }} <span>{{ block.name }}</span></div>
+                                            <pre class="sp-content sp-code">{{ block.args ? block.args.replace(/\\n/g, '\n').replace(/\\"/g, '"') : '' }}</pre>
+                                        </div>
 
-                                  <!-- 3. 工具调用 (Tool Call) -->
-                                  <div v-else-if="block.type === 'tool_call'" class="sap-process-block type-call" :id="'tool-call-'+block.id">
-                                      <div class="sp-header"><i class="fa-solid fa-wrench"></i> {{ t('call') }} <span>{{ block.name }}</span></div>
-                                      <!-- 增加 .replace 替换掉 \n 和 \" -->
-                                      <pre class="sp-content sp-code">{{ block.args ? block.args.replace(/\\n/g, '\n').replace(/\\"/g, '"') : '' }}</pre>
-                                  </div>
+                                        <!-- 工具结果 -->
+                                        <div v-else-if="block.type === 'tool_result'" class="sap-process-block type-result">
+                                            <div class="sp-header"><i class="fa-solid fa-check"></i> {{ block.name }}</div>
+                                            <pre class="sp-content sp-code">{{ block.content ? (typeof block.content === 'string' ? block.content.replace(/\\n/g, '\n').replace(/\\"/g, '"') : block.content) : '' }}</pre>
+                                        </div>
 
-                                  <!-- 4. 工具结果 (Tool Result) -->
-                                  <div v-else-if="block.type === 'tool_result'" class="sap-process-block type-result">
-                                      <div class="sp-header"><i class="fa-solid fa-check"></i> {{ block.name }}</div>
-                                      <pre class="sp-content sp-code">{{ block.content ? (typeof block.content === 'string' ? block.content.replace(/\\n/g, '\n').replace(/\\"/g, '"') : block.content) : '' }}</pre>
-                                  </div>
+                                        <!-- 审批 -->
+                                        <div v-else-if="block.type === 'approval'" class="sap-process-block type-approval" :id="'approval-'+block.id">
+                                            <div class="sp-header"><i class="fa-solid fa-lock"></i> {{ t('permissionRequest') }} · {{ block.data.permission_mode }}</div>
+                                            <div class="sp-content">
+                                                <div class="sp-text">{{ t('AIwantsToExecute') }}: <span>{{ block.data.tool_name }}</span></div>
+                                                <pre class="sp-code-box">{{ JSON.stringify(block.data.tool_params, null, 2) }}</pre>
+                                                <div class="sp-actions">
+                                                    <button @click="processToolApproval(block.id, 'deny')" class="sp-btn ghost">{{ t('Deny') }}</button>
+                                                    <button @click="processToolApproval(block.id, 'always')" class="sp-btn outline">{{ t('AllowAlways') }}</button>
+                                                    <button @click="processToolApproval(block.id, 'once')" class="sp-btn primary">{{ t('AllowOnce') }}</button>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                  <!-- 5. 权限审批 (Approval) -->
-                                  <div v-else-if="block.type === 'approval'" class="sap-process-block type-approval" :id="'approval-'+block.id">
-                                      <div class="sp-header"><i class="fa-solid fa-lock"></i> {{ t('permissionRequest') }} · {{ block.data.permission_mode }}</div>
-                                      <div class="sp-content">
-                                          <div class="sp-text">{{ t('AIwantsToExecute') }}: <span>{{ block.data.tool_name }}</span></div>
-                                          <!-- 审批时参数块保留一层极细的边框作区分 -->
-                                          <pre class="sp-code-box">{{ JSON.stringify(block.data.tool_params, null, 2) }}</pre>
-                                          <div class="sp-actions">
-                                              <button @click="processToolApproval(block.id, 'deny')" class="sp-btn ghost">{{ t('Deny') }}</button>
-                                              <button @click="processToolApproval(block.id, 'always')" class="sp-btn outline">{{ t('AllowAlways') }}</button>
-                                              <button @click="processToolApproval(block.id, 'once')" class="sp-btn primary">{{ t('AllowOnce') }}</button>
-                                          </div>
-                                      </div>
-                                  </div>
+                                        <!-- 错误 -->
+                                        <div v-else-if="block.type === 'error'" class="sap-process-block type-error" :id="'tool-error-'+block.id">
+                                            <div class="sp-header"><i class="fa-solid fa-xmark"></i> {{ block.name }}</div>
+                                            <pre class="sp-content sp-code">{{ block.content ? (typeof block.content === 'string' ? block.content.replace(/\\n/g, '\n').replace(/\\"/g, '"') : block.content) : '' }}</pre>
+                                        </div>
+                                    </template>
 
-                                  <!-- 6. 工具错误 (Error) -->
-                                  <div v-else-if="block.type === 'error'" class="sap-process-block type-error" :id="'tool-error-'+block.id">
-                                      <div class="sp-header"><i class="fa-solid fa-xmark"></i> {{ block.name }}</div>
-                                      <pre class="sp-content sp-code">{{ block.content ? (typeof block.content === 'string' ? block.content.replace(/\\n/g, '\n').replace(/\\"/g, '"') : block.content) : '' }}</pre>
-                                  </div>
-
-
+                                    <!-- 否则（其他已完成工具块）折叠为占位行，只显示标题 -->
+                                     <div v-else class="sap-process-block collapsed-tool-block" @click="openToolBlockDetail(message, block)">
+                                        <div class="sp-header">
+                                            <i v-if="block.type === 'tool_call'" class="fa-solid fa-wrench"></i>
+                                            <i v-else-if="block.type === 'tool_result'" class="fa-solid fa-check"></i>
+                                            <i v-else class="fa-solid fa-brain"></i>
+                                            <span>{{ block.name || block.type }}</span>
+                                        </div>
+                                    </div>
                                 </template>
                                 <div v-if="isTyping && index === messages.length - 1 && (message.displayBlocks?.length || 0) === 0"><i class="fa-solid fa-spinner fa-spin"></i></div>
                             </div>
@@ -1163,8 +1203,11 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                       <!-- 操作按钮区 -->
                       <div class="message-actions" v-if="!allBriefly||message.role !== 'system'||index === 0">
-                        <el-tooltip v-if="message.role === 'user'" :content="t('edit')" placement="bottom">
+                        <el-tooltip v-if="message.role !== 'assistant'" :content="t('edit')" placement="bottom">
                           <el-button @click="openEditDialog(message.role, message.content,index)" circle size="small"><i class="fa-solid fa-pen-to-square"></i></el-button>
+                        </el-tooltip>
+                        <el-tooltip v-if="message.role === 'assistant'" :content="t('view')" placement="bottom">
+                          <el-button @click="openEditDialog(message.role, message.pure_content,index)" circle size="small"><i class="fa-solid fa-pen-to-square"></i></el-button>
                         </el-tooltip>
                         <el-tooltip v-if="message.role === 'assistant'" :content="t('briefly')" placement="bottom">
                           <el-button class="briefly-btn" @click="toggleBriefly(index)" circle size="small"><i class="fa-solid fa-asterisk"></i></el-button>
@@ -1300,7 +1343,7 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                       <el-tooltip :content="t('chatHistory')" placement="top">
                         <el-button
-                          @click="handleHistoryToggle"
+                          @click="isMobile ? showHistoryDialog = true : handleHistoryToggle()"
                           class="icon-btn history-btn"
                           :type="showHistorySidebar ? 'primary' : 'default'"
                           circle>
@@ -2113,7 +2156,28 @@ function updateElement(el, rawMarkdown, formatFn) {
                           </div>
                       </div>
 
-                      <!-- 1.3 扩展列表视图 (严格还原卡片及收藏逻辑) -->
+                      <!-- 1.3 工具详情视图 (新增) -->
+                      <div v-else-if="activeSideView === 'toolDetail'" class="tool-detail-view" style="padding: 16px; height: 100%; overflow-y: auto;">
+                          <div class="workspace-header" style="padding: 8px; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; align-items: center;">
+                              <el-button link @click="closeToolBlockDetail">
+                                  <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
+                              </el-button>
+                              <span style="flex:1; text-align:center; font-weight:bold;">{{ t('toolDetail') }}</span>
+                              <div style="width:40px;"></div>
+                          </div>
+                          <div v-if="activeToolBlock" style="padding: 20px;">
+                              <div class="sap-process-block" :class="'type-' + activeToolBlock.block.type" style="margin: 0; border-radius: 12px;">
+                                  <div class="sp-header">
+                                      <i :class="getToolBlockIcon(activeToolBlock.block.type)"></i>
+                                      <span>{{ activeToolBlock.block.name || activeToolBlock.block.type }}</span>
+                                  </div>
+                                  <div class="sp-content" v-morph:format="formatToolBlockContent(activeToolBlock.block)"></div>
+                              </div>
+                          </div>
+                          <el-empty v-else :description="t('noBlockSelected')" />
+                      </div>
+
+                      <!-- 1.4 扩展列表视图 (严格还原卡片及收藏逻辑) -->
                       <div v-else class="extensions-list" style="margin: 10px; height: 100%; overflow-y: auto;">
                         <el-card class="extension-card default-view-card" :class="{ active: currentExtension === null && activeSideView === 'list' }" @click="resetToDefaultView();expandChatArea();collapseSidePanel();">
                           <div class="extension-info"><h3>{{ t('defaultView') }}</h3><p>{{ t('defaultViewDescription') }}</p></div>
@@ -2125,24 +2189,44 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <div class="extension-info"><h3>{{ t('workspace') || '工作区文件' }}</h3><p>{{ t('workspaceDescription') || '管理与查看本地工作区文件树' }}</p></div>
                         </el-card>
                         <!-- 分隔线 -->
-                        <div class="extensions-divider">
+                        <div class="extensions-divider" style="margin-bottom: 12px;">
                           <span>
                             {{ t('availableExtensions') }}
-                            <el-link
-                              type="primary"
-                              :underline="false"
-                              href="#" 
-                              @click.stop.prevent="switchToExtensionPage();showExtensionsDialog = false" 
-                            >
-                              <el-icon class="mr-1">
-                                <i class="fa-solid fa-puzzle-piece"></i>
-                              </el-icon>{{ t('goToExtensionPage') }}
-                            </el-link>
                           </span>
                         </div>
+
+                        <!-- ✨ 搜索与操作工具栏 ✨ -->
+                        <div class="extensions-toolbar" style="display: flex; align-items: center; margin-bottom: 15px; gap: 10px; flex-wrap: nowrap;">
+                          <!-- 左侧：搜索框 (使用包裹层防止撑破 flex 布局) -->
+                          <div style="flex: 1; min-width: 0;">
+                            <el-input 
+                              v-model="searchExtensionQuery" 
+                              :placeholder="t('search') || '搜索扩展...'" 
+                              clearable
+                              style="width: 100%;"
+                            >
+                              <template #prefix>
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                              </template>
+                            </el-input>
+                          </div>
+                          
+                          <!-- 右侧：跳转按钮 (flex-shrink: 0 防止按钮被压缩) -->
+                          <el-button 
+                            type="primary" 
+                            :style="{color: '#fff'}"
+                            plain
+                            style="flex-shrink: 0;"
+                            @click.stop.prevent="switchToExtensionPage();showExtensionsDialog = false"
+                          >
+                            <i class="fa-solid fa-puzzle-piece" style="margin-right: 5px;"></i>
+                            {{ t('goToExtensionPage') }}
+                          </el-button>
+                        </div>
+
                         <!-- 扩展列表 -->
-                        <el-empty v-if="extensions.length === 0" :description="t('noExtensionsFound')" ></el-empty>
-                        <el-card v-for="ext in extensions" :key="ext.id" class="extension-card" :class="{ active: currentExtension && currentExtension.id === ext.id }" @click="switchExtension(ext)">
+                        <el-empty v-if="filteredExtensions.length === 0" :description="t('noExtensionsFound')" ></el-empty>
+                        <el-card v-for="ext in filteredExtensions" :key="ext.id" class="extension-card" :class="{ active: currentExtension && currentExtension.id === ext.id }" @click="switchExtension(ext)">
                             <div class="btn-top-right" @click.stop>
                               <el-tooltip :content="favoriteExtensionIds.includes(ext.id) ? t('unfavorite') : t('favorite')" placement="top">
                                 <el-button type="default" circle size="small" @click.stop.prevent="toggleFavoriteExtension(ext)">
@@ -2628,7 +2712,7 @@ function updateElement(el, rawMarkdown, formatFn) {
 
           <el-dialog append-to-body
             v-model="showEditDialog"
-            :title="editType === 'system' ? t('editSystemPrompt') : t('editMessage')"
+            :title="getEiditDialogTitle"
             width="80%">
             <el-form-item v-if="editType === 'system'" :label="t('selectSystemPrompt')" class="form-item-align" label-position="left">
               <el-select 
@@ -2651,10 +2735,10 @@ function updateElement(el, rawMarkdown, formatFn) {
               :rows="18"
               :placeholder="t('enterContent')"
             ></el-input>
-            <template #footer>
+            <template #footer v-if="editType !== 'assistant'">
               <el-button @click="showEditDialog = false">{{ t('cancel') }}</el-button>
               <el-button @click="switchToSystemPrompts" v-if="editType === 'system'">{{ t('addSystemPrompt') }}</el-button>
-              <el-button type="primary" @click="saveEdit">{{ editType === 'user' ? t('modifyAndSend'):t('save') }}</el-button>
+              <el-button type="primary" @click="saveEdit" v-if="editType === 'user'" >{{ t('modifyAndSend') }}</el-button>
             </template>
           </el-dialog>
 

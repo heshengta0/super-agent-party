@@ -1346,8 +1346,11 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                       <!-- 操作按钮区 -->
                       <div class="message-actions" v-if="!allBriefly||message.role !== 'system'||index === 0">
-                        <el-tooltip v-if="message.role === 'user'" :content="t('edit')" placement="bottom">
+                        <el-tooltip v-if="message.role !== 'assistant'" :content="t('edit')" placement="bottom">
                           <el-button @click="openEditDialog(message.role, message.content,index)" circle size="small"><i class="fa-solid fa-pen-to-square"></i></el-button>
+                        </el-tooltip>
+                        <el-tooltip v-if="message.role === 'assistant'" :content="t('view')" placement="bottom">
+                          <el-button @click="openEditDialog(message.role, message.pure_content,index)" circle size="small"><i class="fa-solid fa-pen-to-square"></i></el-button>
                         </el-tooltip>
                         <el-tooltip v-if="message.role === 'assistant'" :content="t('briefly')" placement="bottom">
                           <el-button class="briefly-btn" @click="toggleBriefly(index)" circle size="small"><i class="fa-solid fa-asterisk"></i></el-button>
@@ -2852,7 +2855,7 @@ function updateElement(el, rawMarkdown, formatFn) {
 
           <el-dialog append-to-body
             v-model="showEditDialog"
-            :title="editType === 'system' ? t('editSystemPrompt') : t('editMessage')"
+            :title="getEiditDialogTitle"
             width="80%">
             <el-form-item v-if="editType === 'system'" :label="t('selectSystemPrompt')" class="form-item-align" label-position="left">
               <el-select 
@@ -2875,10 +2878,10 @@ function updateElement(el, rawMarkdown, formatFn) {
               :rows="18"
               :placeholder="t('enterContent')"
             ></el-input>
-            <template #footer>
+            <template #footer v-if="editType !== 'assistant'">
               <el-button @click="showEditDialog = false">{{ t('cancel') }}</el-button>
               <el-button @click="switchToSystemPrompts" v-if="editType === 'system'">{{ t('addSystemPrompt') }}</el-button>
-              <el-button type="primary" @click="saveEdit">{{ editType === 'user' ? t('modifyAndSend'):t('save') }}</el-button>
+              <el-button type="primary" @click="saveEdit" v-if="editType === 'user'" >{{ t('modifyAndSend') }}</el-button>
             </template>
           </el-dialog>
 
@@ -17043,8 +17046,11 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                     <!-- 操作按钮区 -->
                     <div class="message-actions" v-if="!allBriefly||message.role !== 'system'||index === 0">
-                      <el-tooltip v-if="message.role === 'user'" :content="t('edit')" placement="bottom">
+                      <el-tooltip v-if="message.role !== 'assistant'" :content="t('edit')" placement="bottom">
                         <el-button @click="openEditDialog(message.role, message.content,index)" circle size="small"><i class="fa-solid fa-pen-to-square"></i></el-button>
+                      </el-tooltip>
+                      <el-tooltip v-if="message.role === 'assistant'" :content="t('view')" placement="bottom">
+                        <el-button @click="openEditDialog(message.role, message.pure_content,index)" circle size="small"><i class="fa-solid fa-pen-to-square"></i></el-button>
                       </el-tooltip>
                       <el-tooltip v-if="message.role === 'assistant'" :content="t('briefly')" placement="bottom">
                         <el-button class="briefly-btn" @click="toggleBriefly(index)" circle size="small"><i class="fa-solid fa-asterisk"></i></el-button>
