@@ -186,7 +186,7 @@ PORT = FINAL_PORT
 os.environ['DYNAMIC_PORT'] = str(FINAL_PORT)
 
 # 同时调用 change_port 保持同步
-from py.get_setting import change_port
+from py.get_setting import change_port, reset_user_data_dir, set_custom_user_data_dir
 change_port(FINAL_PORT)
 
 # 核心：立刻打印！
@@ -11472,6 +11472,36 @@ from py.acpx_tools import check_acpx_available
 async def acpx_status():
     """返回 ACPX 的安装状态和环境信息"""
     return check_acpx_available()
+
+
+@app.get("/api/system/data-path")
+async def get_data_path():
+    """获取当前的数据路径"""
+    return {
+        "path": USER_DATA_DIR,
+        "is_docker": IS_DOCKER
+    }
+
+class PathUpdateReq(BaseModel):
+    path: str
+
+@app.post("/api/system/set-path")
+async def set_data_path(req: PathUpdateReq):
+    """修改数据路径"""
+    success, msg = set_custom_user_data_dir(req.path)
+    if success:
+        return {"success": True, "new_path": msg}
+    else:
+        raise HTTPException(status_code=500, detail=msg)
+
+@app.post("/api/system/reset-path")
+async def reset_data_path():
+    """重置数据路径"""
+    success, msg = reset_user_data_dir()
+    if success:
+        return {"success": True, "path": msg}
+    else:
+        raise HTTPException(status_code=500, detail=msg)
 
 from py.uv_api import router as uv_router
 app.include_router(uv_router)

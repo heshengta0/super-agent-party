@@ -29,12 +29,52 @@ def get_base_path():
 base_path = get_base_path()
 
 # ----------------- 2. 路径定义 -----------------
-if IS_DOCKER:
-    USER_DATA_DIR = '/app/data'
-else:
-    USER_DATA_DIR = user_data_dir(APP_NAME, roaming=True)
+# 1. 定义“锚点”路径（系统默认配置目录，无论怎么改路径，这个引导文件永远放在这）
+ANCHOR_USER_DATA_DIR = user_data_dir(APP_NAME, roaming=True)
+PATH_REDIRECT_FILE = os.path.join(ANCHOR_USER_DATA_DIR, 'path_config.json')
 
-# --- 核心目录 ---
+def get_effective_user_data_dir():
+    """获取当前生效的数据目录"""
+    if IS_DOCKER:
+        return '/app/data'
+    
+    if os.path.exists(PATH_REDIRECT_FILE):
+        try:
+            with open(PATH_REDIRECT_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                custom_path = config.get("custom_user_data_dir")
+                
+                if custom_path:
+                    # --- 增强防呆逻辑 ---
+                    # 1. 必须是绝对路径 (防止用户输入 aaaa 这种相对路径)
+                    if not os.path.isabs(custom_path):
+                        logging.error(f"[Path] 自定义路径不是绝对路径: {custom_path}")
+                        return ANCHOR_USER_DATA_DIR
+
+                    # 2. 尝试创建目录并检查权限
+                    os.makedirs(custom_path, exist_ok=True)
+                    
+                    # 3. 验证是否真的有写权限 (创建一个临时文件试试)
+                    test_file = os.path.join(custom_path, '.path_test')
+                    try:
+                        with open(test_file, 'w') as f:
+                            f.write('test')
+                        os.remove(test_file)
+                        return custom_path
+                    except Exception:
+                        logging.error(f"[Path] 自定义路径无写权限: {custom_path}")
+                        return ANCHOR_USER_DATA_DIR
+                        
+        except Exception as e:
+            logging.error(f"[Path] 读取路径配置异常，回退默认: {e}")
+            pass
+            
+    return ANCHOR_USER_DATA_DIR
+
+# 2. 动态获取 USER_DATA_DIR
+USER_DATA_DIR = get_effective_user_data_dir()
+
+# --- 核心目录 --- (这部分保持原样，但它们现在会跟随 USER_DATA_DIR 动态改变)
 LOG_DIR = os.path.join(USER_DATA_DIR, 'logs')
 MEMORY_CACHE_DIR = os.path.join(USER_DATA_DIR, 'memory_cache')
 UPLOAD_FILES_DIR = os.path.join(USER_DATA_DIR, 'uploaded_files')
@@ -50,28 +90,18 @@ DEFAULT_EBD_DIR = os.path.join(USER_DATA_DIR, 'ebd')
 def get_global_skills_dir():
     """
     获取标准的全局Agent Skills目录，支持跨平台
-    标准路径: ~/.agents/skills (macOS/Linux) 或 %USERPROFILE%\.agents\skills (Windows)
     """
     home_dir = Path.home()
-    
-    # 检查是否在Docker环境中
     if IS_DOCKER:
-        # Docker环境中使用/app/.agents/skills
         docker_skills_dir = Path('/app/.agents/skills')
         docker_skills_dir.mkdir(parents=True, exist_ok=True)
         return str(docker_skills_dir)
     
-    # 标准全局路径
     global_skills_dir = home_dir / '.agents' / 'skills'
-    
-    # 确保目录存在
     global_skills_dir.mkdir(parents=True, exist_ok=True)
-    
     return str(global_skills_dir)
 
-# 使用标准的全局skills路径
 SKILLS_DIR = get_global_skills_dir()
-
 
 # --- 配置文件 ---
 SETTINGS_FILE = os.path.join(USER_DATA_DIR, 'settings.json')
@@ -88,7 +118,7 @@ DATABASE_PATH = os.path.join(USER_DATA_DIR, 'super_agent_party.db')
 COVS_PATH = os.path.join(USER_DATA_DIR, "conversations.db")
 
 # 批量创建目录
-dirs_to_create = [
+dirs_to_create =[
     USER_DATA_DIR, LOG_DIR, MEMORY_CACHE_DIR, UPLOAD_FILES_DIR, 
     TOOL_TEMP_DIR, AGENT_DIR, KB_DIR, EXT_DIR, 
     DEFAULT_ASR_DIR, DEFAULT_TTS_DIR, DEFAULT_EBD_DIR, CONFIG_BASE_PATH, SKILLS_DIR
@@ -98,6 +128,47 @@ for d in set(dirs_to_create):
         os.makedirs(d, exist_ok=True)
     except Exception:
         pass
+
+# ================== 新增：路径管理函数 ==================
+def set_custom_user_data_dir(new_path):
+    """设置新的数据目录并写入引导文件"""
+    if IS_DOCKER:
+        return False, "Docker环境下无法修改数据路径"
+    
+    try:
+        # 1. 转换为绝对路径
+        abs_path = os.path.abspath(new_path)
+        
+        # 2. 基本校验：不能是文件，必须是绝对路径
+        if os.path.isfile(abs_path):
+            return False, "目标路径是一个文件，请输入文件夹路径"
+            
+        # 3. 尝试创建并测试写入 (提前发现错误)
+        os.makedirs(abs_path, exist_ok=True)
+        test_file = os.path.join(abs_path, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        
+        # 4. 写入引导文件
+        os.makedirs(ANCHOR_USER_DATA_DIR, exist_ok=True)
+        with open(PATH_REDIRECT_FILE, 'w', encoding='utf-8') as f:
+            json.dump({"custom_user_data_dir": abs_path}, f, ensure_ascii=False, indent=2)
+            
+        return True, abs_path
+    except Exception as e:
+        return False, f"路径无效或无权限: {str(e)}"
+
+def reset_user_data_dir():
+    """重置回系统默认路径"""
+    if IS_DOCKER:
+        return False, "Docker环境下无法修改数据路径"
+    try:
+        if os.path.exists(PATH_REDIRECT_FILE):
+            os.remove(PATH_REDIRECT_FILE)
+        return True, ANCHOR_USER_DATA_DIR
+    except Exception as e:
+        return False, str(e)
 
 # ----------------- 3. 关键修复：恢复全局 BLOCKLIST 变量 -----------------
 # 兼容 py/load_files.py 的导入需求

@@ -2266,5 +2266,5 @@ main();`,
     _streamTargetMsg: null,            // 当前正在流式更新的消息对象
     activeToolBlock: null,        // 当前查看的块对象 { messageIndex, blockIndex, block }
     activeToolBlockMessage: null, // 所属消息引用
-
+    customDataPath: "",
 };

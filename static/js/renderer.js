@@ -717,7 +717,7 @@ const app = Vue.createApp({
               this.handleUrlEnter();
           });
       }
-      
+      this.fetchDataPath();
       this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({
         sampleRate: 24000
       });

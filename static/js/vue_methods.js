@@ -18172,4 +18172,105 @@ gotoAddExtension(){
     }
   },
 
+  // 1. 初始化获取当前路径
+  async fetchDataPath() {
+    try {
+      const response = await fetch('/api/system/data-path');
+      if (response.ok) {
+        const data = await response.json();
+        this.customDataPath = data.path;
+        this.isDocker = data.is_docker;
+      }
+    } catch (error) {
+      console.error("fetchDataPath Error:", error);
+    }
+  },
+
+  // 2. 浏览目录 (调用 Electron 对话框)
+  async browseDataDirectory() {
+    if (!this.isElectron) {
+      showNotification('仅支持桌面端操作', 'warning');
+      return;
+    }
+    try {
+      // 注意：根据您 main.js 里的定义，这里调用对应的 preload 映射方法
+      // 如果您的 preload 映射的是 dialog:openDirectory，则使用如下：
+      const result = await window.electronAPI.openDirectoryDialog(); 
+      if (!result.canceled && result.filePaths.length > 0) {
+        this.customDataPath = result.filePaths[0];
+      }
+    } catch (error) {
+      console.error('选择目录出错:', error);
+      showNotification('选择目录失败', 'error');
+    }
+  },
+
+  // 3. 应用并保存路径
+  async saveDataPath() {
+    if (!this.customDataPath || !this.customDataPath.trim()) {
+      showNotification(this.t('pathCannotBeEmpty'), 'warning');
+      return;
+    }
+    try {
+      await this.$confirm(this.t('confirmChangePathText'), this.t('warning'), {
+        confirmButtonText: this.t('confirm'),
+        cancelButtonText: this.t('cancel'),
+        type: 'warning'
+      });
+
+      const response = await fetch('/api/system/set-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: this.customDataPath.trim() })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        showNotification(this.t('pathUpdateSuccess'), 'success');
+        this.showRestartDialog = true; // 触发重启询问弹窗
+      } else {
+        showNotification(data.detail || '修改失败', 'error');
+      }
+    } catch (error) {
+      if (error !== 'cancel') showNotification(error.message, 'error');
+    }
+  },
+
+  // 4. 重置路径
+  async resetDataPath() {
+    try {
+      await this.$confirm(this.t('confirmResetPathText'), this.t('warning'), {
+        confirmButtonText: this.t('confirm'),
+        cancelButtonText: this.t('cancel'),
+        type: 'warning'
+      });
+
+      const response = await fetch('/api/system/reset-path', { method: 'POST' });
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        showNotification(this.t('pathResetSuccess'), 'success');
+        this.customDataPath = data.path;
+        this.showRestartDialog = true;
+      }
+    } catch (error) {
+      if (error !== 'cancel') showNotification('重置失败', 'error');
+    }
+  },
+
+  // 5. 在资源管理器中直接进入当前文件夹内部
+  async openDataFolder() {
+    if (this.customDataPath) {
+      if (this.isElectron) {
+        // 使用 electronAPI 下的 openPath 
+        // 它的底层调用的是 shell.openPath，会直接打开并进入该目录
+        window.electronAPI.openPath(this.customDataPath);
+      } else {
+        showNotification('仅支持桌面端操作', 'warning');
+      }
+    } else {
+      showNotification('路径尚未加载', 'warning');
+    }
+  },
+
 }
