@@ -4210,17 +4210,20 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                     choice = chunk.choices[0]
                     if choice.delta.tool_calls:  # function_calling
                         is_tool_call = True
-                        for idx, tool_call in enumerate(choice.delta.tool_calls):
-                            tool = choice.delta.tool_calls[idx]
-                            if len(tool_calls) <= idx:
-                                tool_calls.append(tool)
-                                continue
-                            if tool.function.arguments:
-                                # function参数为流式响应，需要拼接
-                                if tool_calls[idx].function.arguments:
-                                    tool_calls[idx].function.arguments += tool.function.arguments
-                                else:
-                                    tool_calls[idx].function.arguments = tool.function.arguments
+                        for tool in choice.delta.tool_calls:
+                            idx = getattr(tool, 'index', len(tool_calls))
+                            while len(tool_calls) <= idx:
+                                tool_calls.append(None)
+                            
+                            if tool_calls[idx] is None:
+                                tool_calls[idx] = tool
+                            else:
+                                if tool.function and tool.function.arguments:
+                                    # function参数为流式响应，需要拼接
+                                    if tool_calls[idx].function.arguments:
+                                        tool_calls[idx].function.arguments += tool.function.arguments
+                                    else:
+                                        tool_calls[idx].function.arguments = tool.function.arguments
                             current_tool = tool_calls[idx]
                             if current_tool.function and current_tool.function.name:
                                 progress_chunk = {
@@ -4487,296 +4490,224 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                 while tool_calls or search_not_done:
                     full_content = ""
                     if tool_calls:
-                        response_content = tool_calls[0].function
-                        print(response_content)
-                        modified_data = '[' + response_content.arguments.replace('}{', '},{') + ']'
-                        data_list = json.loads(modified_data)
-                        first_arg = data_list[0] if len(data_list) > 0 else {}
-                        
-                        # 【修复 1】显式发送 "call" 事件，锁定 UI 状态并同步 ID
-                        # 这告诉前端：参数接收完毕，确认调用，并绑定 ID
-                        call_confirm_chunk = {
-                            "choices": [{
-                                "delta": {
-                                    "tool_call_id": tool_calls[0].id, # 关键：带上 ID
-                                    "tool_content": {
-                                        "title": response_content.name,
-                                        "content": modified_data, # 发送完整参数
-                                        "type": "call"
-                                    }
-                                }
-                            }]
-                        }
-                        yield f"data: {json.dumps(call_confirm_chunk)}\n\n"
-
-                        modified_tool = f"{await t("sendArg")}{first_arg}"
-                        
-                        if settings['tools']['asyncTools']['enabled']:
-                            # ... 异步工具逻辑保持不变 ...
-                            tool_id = uuid.uuid4()
-                            async_tool_id = f"{response_content.name}_{tool_id}"
-                            chunk_dict = {
-                                "id": "agentParty",
-                                "choices": [
-                                    {
-                                        "finish_reason": None,
-                                        "index": 0,
-                                        "delta": {
-                                            "role":"assistant",
-                                            "content": "",
-                                            "async_tool_id": async_tool_id
-                                        }
-                                    }
-                                ]
-                            }
-                            yield f"data: {json.dumps(chunk_dict)}\n\n"
-                            asyncio.create_task(
-                                execute_tool(
-                                    async_tool_id,
-                                    response_content.name,
-                                    first_arg,
-                                    settings,
-                                    user_prompt
-                                )
-                            )
-                            async with async_tools_lock:
-                                async_tools[async_tool_id] = {
-                                    "status": "pending",
-                                    "result": None,
-                                    "name":response_content.name,
-                                    "parameters":first_arg
-                                }
-                            results = f"{response_content.name}tool has been successfully launched. It will take some time to run, and the results will be provided in the next round of conversation." # 保持原样
-                        else:
-                            results = await dispatch_tool(response_content.name, first_arg, settings,request.is_sub_agent)
-
-                        if results is None:
-                            # 保持原样，但建议加上 ID
-                            chunk = {
-                                "id": "extra_tools",
-                                "choices": [
-                                    {
-                                        "index": 0,
-                                        "delta": {
-                                            "role":"assistant",
-                                            "content": "",
-                                            "tool_calls": modified_data,
-                                        }
-                                    }
-                                ]
-                            }
-                            yield f"data: {json.dumps(chunk)}\n\n"
-                            break
-
-                        if response_content.name in ["query_knowledge_base"] and type(results) == list:
-                            if settings["KBSettings"]["is_rerank"]:
-                                results = await rerank_knowledge_base(user_prompt, results)
-                            results = json.dumps(results, ensure_ascii=False, indent=4)
-                        
-                        # 更新 messages 历史 (保持不变)
-                        request.messages.append({
-                            "tool_calls": [{
-                                "id": tool_calls[0].id,
-                                "function": {
-                                    "arguments": json.dumps(first_arg),
-                                    "name": response_content.name,
-                                },
-                                "type": tool_calls[0].type,
-                            }],
+                        # 1. 组装并保存 assistant 消息中的 tool_calls 列表
+                        assistant_tool_calls_msg = {
                             "role": "assistant",
                             "content": "",
                             "reasoning_content": "",
+                            "tool_calls": []
+                        }
+                        assistant_tool_calls_str =[]
+                        
+                        for tc in tool_calls:
+                            if tc is None: continue
+                            response_content = tc.function
+                            assistant_tool_calls_msg["tool_calls"].append({
+                                "id": tc.id,
+                                "function": {
+                                    "arguments": response_content.arguments,
+                                    "name": response_content.name,
+                                },
+                                "type": tc.type,
+                            })
+                            assistant_tool_calls_str.append(str(response_content))
+                        
+                        request.messages.append(assistant_tool_calls_msg)
+                        reasoner_messages.append({
+                            "role": "assistant",
+                            "content": "\n".join(assistant_tool_calls_str),
+                            "reasoning_content": "",
                         })
 
-                        # 【修复 2】发送结果时，务必带上 tool_call_id
-                        if not isinstance(results, AsyncIterator):
-                            result_chunk = {
-                                "choices": [{
+                        has_approval_required = False
+                        
+                        # 2. 依次执行各个并行工具调用
+                        for tc in tool_calls:
+                            if tc is None: continue
+                            response_content = tc.function
+                            
+                            # 兼容大模型将多个 JSON 参数拼接在一个工具参数里的边缘情况
+                            modified_data = '[' + response_content.arguments.replace('}{', '},{') + ']'
+                            try:
+                                data_list = json.loads(modified_data)
+                            except:
+                                try:
+                                    data_list = [json.loads(response_content.arguments)]
+                                except:
+                                    data_list = [{}]
+                            
+                            if not isinstance(data_list, list):
+                                data_list = [data_list]
+                            if len(data_list) == 0:
+                                data_list = [{}]
+
+                            # 【修复 1】显式发送 "call" 事件，锁定 UI 状态并同步 ID
+                            call_confirm_chunk = {
+                                "choices":[{
                                     "delta": {
-                                        "tool_call_id": tool_calls[0].id, # 关键：匹配之前的 Call ID
+                                        "tool_call_id": tc.id,
                                         "tool_content": {
                                             "title": response_content.name,
-                                            "content": str(results),
-                                            "type": "tool_result"
+                                            "content": response_content.arguments, # 发送完整参数给前端渲染
+                                            "type": "call"
                                         }
                                     }
                                 }]
                             }
-                            yield f"data: {json.dumps(result_chunk)}\n\n"
-                        else:  
-                            # 流式工具结果处理 (AsyncIterator)
-                            buffer = []
-                            first = True
-                            async for chunk in results:
-                                buffer.append(chunk)
-                                if first:
-                                    # 第一帧带 title
-                                    stream_chunk = {
-                                        "choices": [{
-                                            "delta": {
-                                                "tool_call_id": tool_calls[0].id, # 关键
-                                                "tool_content": {
-                                                    "title": response_content.name,
-                                                    "content": chunk,
-                                                    "type": "tool_result_stream"
+                            yield f"data: {json.dumps(call_confirm_chunk)}\n\n"
+
+                            all_results_for_this_call =[]
+                            is_streaming_result = False
+
+                            # 遍历内部参数列表执行工具（绝大多数情况 data_list 长度为 1）
+                            for arg_item in data_list:
+                                if settings['tools']['asyncTools']['enabled']:
+                                    tool_id = uuid.uuid4()
+                                    async_tool_id = f"{response_content.name}_{tool_id}"
+                                    chunk_dict = {
+                                        "id": "agentParty",
+                                        "choices":[
+                                            {
+                                                "finish_reason": None,
+                                                "index": 0,
+                                                "delta": {
+                                                    "role": "assistant",
+                                                    "content": "",
+                                                    "async_tool_id": async_tool_id
                                                 }
                                             }
-                                        }]
+                                        ]
                                     }
-                                    yield f"data: {json.dumps(stream_chunk)}\n\n"
-                                    first = False
+                                    yield f"data: {json.dumps(chunk_dict)}\n\n"
+                                    asyncio.create_task(
+                                        execute_tool(
+                                            async_tool_id,
+                                            response_content.name,
+                                            arg_item,
+                                            settings,
+                                            user_prompt
+                                        )
+                                    )
+                                    async with async_tools_lock:
+                                        async_tools[async_tool_id] = {
+                                            "status": "pending",
+                                            "result": None,
+                                            "name": response_content.name,
+                                            "parameters": arg_item
+                                        }
+                                    res = f"{response_content.name}tool has been successfully launched. It will take some time to run, and the results will be provided in the next round of conversation."
+                                    all_results_for_this_call.append(res)
                                 else:
-                                    # 后续帧
-                                    stream_chunk = {
-                                        "choices": [{
-                                            "delta": {
-                                                "tool_call_id": tool_calls[0].id, # 关键
-                                                "tool_content": {
-                                                    "title": "tool_result_stream",
-                                                    "content": chunk,
-                                                    "type": "tool_result_stream"
+                                    res = await dispatch_tool(response_content.name, arg_item, settings, request.is_sub_agent)
+
+                                    if res is None:
+                                        chunk = {
+                                            "id": "extra_tools",
+                                            "choices":[
+                                                {
+                                                    "index": 0,
+                                                    "delta": {
+                                                        "role":"assistant",
+                                                        "content": "",
+                                                        "tool_calls": response_content.arguments,
+                                                    }
                                                 }
+                                            ]
+                                        }
+                                        yield f"data: {json.dumps(chunk)}\n\n"
+                                        continue
+
+                                    if response_content.name in["query_knowledge_base"] and type(res) == list:
+                                        if settings["KBSettings"]["is_rerank"]:
+                                            res = await rerank_knowledge_base(user_prompt, res)
+                                        res = json.dumps(res, ensure_ascii=False, indent=4)
+                                    
+                                    # 处理流式工具结果
+                                    if isinstance(res, AsyncIterator):
+                                        is_streaming_result = True
+                                        buffer =[]
+                                        first = True
+                                        async for chunk in res:
+                                            buffer.append(chunk)
+                                            if first:
+                                                stream_chunk = {
+                                                    "choices":[{
+                                                        "delta": {
+                                                            "tool_call_id": tc.id,
+                                                            "tool_content": {
+                                                                "title": response_content.name,
+                                                                "content": chunk,
+                                                                "type": "tool_result_stream"
+                                                            }
+                                                        }
+                                                    }]
+                                                }
+                                                yield f"data: {json.dumps(stream_chunk)}\n\n"
+                                                first = False
+                                            else:
+                                                stream_chunk = {
+                                                    "choices":[{
+                                                        "delta": {
+                                                            "tool_call_id": tc.id,
+                                                            "tool_content": {
+                                                                "title": "tool_result_stream",
+                                                                "content": chunk,
+                                                                "type": "tool_result_stream"
+                                                            }
+                                                        }
+                                                    }]
+                                                }
+                                                yield f"data: {json.dumps(stream_chunk)}\n\n"
+                                        res = "".join(buffer)
+
+                                    if isinstance(res, str) and '"approval_required"' in res:
+                                        try:
+                                            parsed_res = json.loads(res)
+                                            if parsed_res.get("type") == "approval_required":
+                                                has_approval_required = True
+                                        except Exception:
+                                            pass
+                                        
+                                    all_results_for_this_call.append(str(res))
+
+                            if len(all_results_for_this_call) == 0:
+                                combined_results = "None"
+                            elif len(all_results_for_this_call) == 1:
+                                combined_results = all_results_for_this_call[0]
+                            else:
+                                combined_results = "\n\n".join(all_results_for_this_call)
+                            
+                            # 【修复 2】发送组合后的结果 (非流式情况下)
+                            if not is_streaming_result:
+                                result_chunk = {
+                                    "choices":[{
+                                        "delta": {
+                                            "tool_call_id": tc.id,
+                                            "tool_content": {
+                                                "title": response_content.name,
+                                                "content": combined_results,
+                                                "type": "tool_result"
                                             }
-                                        }]
-                                    }
-                                    yield f"data: {json.dumps(stream_chunk)}\n\n"
-                            results = "".join(buffer)
+                                        }
+                                    }]
+                                }
+                                yield f"data: {json.dumps(result_chunk)}\n\n"
 
-                        request.messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_calls[0].id,
-                                "name": response_content.name,
-                                "content": str("".join(results)),
-                            }
-                        )
-
-                        # =========================================================================
-                        # 第一阶段：上下文压缩 (仅在达到阈值时触发，决定“保留哪些消息”)
-                        # =========================================================================
-                        max_rounds = settings.get("max_rounds", 0)
-                        chat_messages = request.messages # 这里的 chat_messages 包含 system
-                        
-                        if max_rounds > 0:
-                            
-                            # 区分系统消息和对话消息
-                            sys_msgs = [m for m in chat_messages if get_role(m) == "system"]
-                            dialog_msgs = [m for m in chat_messages if get_role(m) != "system"]
-                            
-                            # 设定压缩阈值：当非系统消息超过 max_rounds * 2 + 1 时开始压缩
-                            if len(dialog_msgs) > (max_rounds * 2 + 1):
-                                keep_indices = set()
-                                
-                                # 1. 总是保留第一条消息 (Anchor User Prompt)
-                                if len(dialog_msgs) > 0: keep_indices.add(0)
-                                
-                                # 2. 保留所有 User 消息 (User 优先策略)
-                                for i, m in enumerate(dialog_msgs):
-                                    if get_role(m) == "user": keep_indices.add(i)
-                                
-                                # 3. 保留每个 Turn 的最后一个 Assistant 消息 (最终答案)
-                                for i in range(len(dialog_msgs)):
-                                    if get_role(dialog_msgs[i]) == "assistant":
-                                        is_last = True
-                                        for j in range(i + 1, len(dialog_msgs)):
-                                            if get_role(dialog_msgs[j]) == "assistant":
-                                                is_last = False; break
-                                            if get_role(dialog_msgs[j]) == "user": break
-                                        if is_last: keep_indices.add(i)
-                                
-                                # 4. 保留最近的活跃窗口 (最近 N 条消息，确保当前工具链不被切断)
-                                tail_start = max(0, len(dialog_msgs) - (max_rounds * 2))
-                                for i in range(tail_start, len(dialog_msgs)):
-                                    keep_indices.add(i)
-                                
-                                # 构造初步压缩后的列表
-                                compressed_dialog = [dialog_msgs[i] for i in sorted(list(keep_indices))]
-                                chat_messages = sys_msgs + compressed_dialog
-                                print(f"[Context] Compressed to {len(chat_messages)} msgs.")
-
-
-                        final_messages = []
-                        pending_tool_call_ids = set()
-
-                        for msg in chat_messages:
-                            role = get_role(msg)
-                            
-                            if role == "tool":
-                                t_id = msg.get("tool_call_id") if isinstance(msg, dict) else getattr(msg, "tool_call_id", None)
-                                # 核心校验：如果这个 tool 消息不在我们记录的待响应 ID 列表中，直接丢弃
-                                if t_id and t_id in pending_tool_call_ids:
-                                    final_messages.append(msg)
-                                    pending_tool_call_ids.remove(t_id) # 匹配成功，移除
-                                else:
-                                    print(f"[Sanitizer] 丢弃孤立的 tool 消息: {t_id}")
-                                    continue
-                            
-                            elif role == "assistant":
-                                tcs = get_tcs(msg)
-                                if tcs:
-                                    # 这是一个发起工具调用的消息
-                                    # 暂时先存入，并记录它期望的 ID
-                                    current_tcs_ids = {tc.get("id") if isinstance(tc, dict) else tc.id for tc in tcs}
-                                    final_messages.append(msg)
-                                    for tid in current_tcs_ids: pending_tool_call_ids.add(tid)
-                                else:
-                                    # 普通助手回复
-                                    final_messages.append(msg)
-                            
-                            else:
-                                # user 或 system 消息，直接通过
-                                final_messages.append(msg)
-
-                        # 最终反向检查：如果最后一条是带 tool_calls 的 assistant，但后面没有 tool 消息
-                        # 我们需要移除这些 tool_calls 标记，或者直接移除该条消息（取决于业务需求）
-                        # 这里选择保留消息文本但清空 tool_calls，防止 API 报错
-                        while final_messages:
-                            last_msg = final_messages[-1]
-                            tcs = get_tcs(last_msg)
-                            # 如果最后一条助手消息发起了调用，但我们已经没有后续消息来填补它了
-                            if tcs and any( ( (tc.get("id") if isinstance(tc, dict) else tc.id) in pending_tool_call_ids ) for tc in tcs ):
-                                # 如果该消息有文本内容，我们抹除 tool_calls 保留文本
-                                # 如果没文本，就直接弹出整条消息
-                                content = last_msg.get("content") if isinstance(last_msg, dict) else getattr(last_msg, "content", "")
-                                if content:
-                                    if isinstance(last_msg, dict):
-                                        last_msg["tool_calls"] = None
-                                    else:
-                                        setattr(last_msg, "tool_calls", None)
-                                    print("[Sanitizer] 抹除末尾未闭合的 tool_calls")
-                                    break # 处理完毕
-                                else:
-                                    final_messages.pop()
-                                    print("[Sanitizer] 弹出末尾无内容的孤立 tool_call 发起消息")
-                            else:
-                                break
-
-                        request.messages = final_messages
-                        request.messages = ensure_thinking_fields(request.messages)
-                        # =========================================================================
-                        reasoner_messages.append(
-                            {
-                                "role": "assistant",
-                                "content": str(response_content),
-                                "reasoning_content": "",
-                            }
-                        )
-                        reasoner_messages.append(
-                            {
-                                "role": "user",
-                                "content": f"{response_content.name}工具结果："+str(results),
-                                "reasoning_content": "",
-                            }
-                        )
-
-                        # 【核心修复】：如果工具返回的是审批请求，立即跳出循环，结束当前流，等待前端手动调用恢复
-                        if isinstance(results, str) and '"approval_required"' in results:
-                            try:
-                                parsed_res = json.loads(results)
-                                if parsed_res.get("type") == "approval_required":
-                                    break  # 立即跳出 while 循环，不再进行下一轮 LLM 推理
-                            except Exception:
-                                pass
+                            request.messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "name": response_content.name,
+                                    "content": str(combined_results),
+                                }
+                            )
+                            reasoner_messages.append(
+                                {
+                                    "role": "user",
+                                    "content": f"{response_content.name}工具结果：{combined_results}",
+                                    "reasoning_content": "",
+                                }
+                            )
                     # 如果启用推理模型
                     if settings['reasoner']['enabled'] or enable_thinking:
                         if tools:
@@ -5015,17 +4946,20 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                                 yield f"data: {chunk.model_dump_json()}\n\n"
                                 continue
                             if choice.delta.tool_calls:  # function_calling
-                                for idx, tool_call in enumerate(choice.delta.tool_calls):
-                                    tool = choice.delta.tool_calls[idx]
-                                    if len(tool_calls) <= idx:
-                                        tool_calls.append(tool)
-                                        continue
-                                    if tool.function.arguments:
-                                        # function参数为流式响应，需要拼接
-                                        if tool_calls[idx].function.arguments:
-                                            tool_calls[idx].function.arguments += tool.function.arguments
-                                        else:
-                                            tool_calls[idx].function.arguments = tool.function.arguments
+                                for tool in choice.delta.tool_calls:
+                                    idx = getattr(tool, 'index', len(tool_calls))
+                                    while len(tool_calls) <= idx:
+                                        tool_calls.append(None)
+                                    
+                                    if tool_calls[idx] is None:
+                                        tool_calls[idx] = tool
+                                    else:
+                                        if tool.function and tool.function.arguments:
+                                            # function参数为流式响应，需要拼接
+                                            if tool_calls[idx].function.arguments:
+                                                tool_calls[idx].function.arguments += tool.function.arguments
+                                            else:
+                                                tool_calls[idx].function.arguments = tool.function.arguments
                                 current_tool = tool_calls[idx]
                                 if current_tool.function and current_tool.function.name:
                                     progress_chunk = {
