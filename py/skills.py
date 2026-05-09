@@ -6,6 +6,7 @@ import httpx
 import yaml
 import re
 import asyncio
+import logging
 from pathlib import Path
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
@@ -13,6 +14,9 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 from py.get_setting import SKILLS_DIR
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -69,14 +73,11 @@ def parse_github_url(url: str):
         
     owner, repo, branch, subpath = match.groups()
     
-    # 🎯 关键修改：如果URL中没有指定分支，需要动态获取默认分支
+    # 🎯 如果URL中没有指定分支，动态获取默认分支
     if not branch:
-        # 方法1：先尝试 main，如果失败再尝试 master（简单但不完美）
-        # 更好的方法：调用 GitHub API 获取默认分支
         import httpx
         try:
             api_url = f"https://api.github.com/repos/{owner}/{repo}"
-            # 同步请求，因为当前函数不是async
             with httpx.Client(timeout=5.0) as client:
                 response = client.get(api_url)
                 if response.status_code == 200:
@@ -101,11 +102,6 @@ async def download_zip(url: str, dest: Path):
             with open(dest, "wb") as f:
                 async for chunk in resp.aiter_bytes():
                     f.write(chunk)
-
-import logging
-
-# 配置日志
-logger = logging.getLogger(__name__)
 
 def get_skill_metadata(skill_dir: Path, skill_id: str) -> Skill:
     """
@@ -179,7 +175,6 @@ def get_skill_metadata(skill_dir: Path, skill_id: str) -> Skill:
                 
                 if content is not None:
                     # 提取 --- 之间的 YAML（更宽松的匹配）
-                    # 支持开头有空格的情况，以及不同换行符
                     match = re.search(
                         r'^\s*---\s*[\r\n]+(.*?)[\r\n]+---\s*',
                         content,
@@ -188,7 +183,7 @@ def get_skill_metadata(skill_dir: Path, skill_id: str) -> Skill:
                     
                     if match:
                         yaml_text = match.group(1).strip()
-                        if yaml_text:  # 确保不是空的
+                        if yaml_text:
                             try:
                                 parsed_meta = yaml.safe_load(yaml_text)
                                 # 严格类型检查
@@ -222,12 +217,10 @@ def get_skill_metadata(skill_dir: Path, skill_id: str) -> Skill:
     # 5. 安全地获取文件列表
     file_list: List[str] = []
     try:
-        # 使用 list 和过滤，避免在迭代时发生异常
         file_list = [
             f.name for f in skill_dir.iterdir() 
             if f.is_file() and not f.name.startswith('.') and not f.name.startswith('~')
         ]
-        # 排序以确保确定性
         file_list.sort()
     except PermissionError as e:
         logger.error(f"无权限列出目录 {skill_dir} 内容: {e}")
@@ -255,9 +248,7 @@ def _read_file_with_encoding(file_path: Path, max_size: int = 1024 * 1024) -> Op
     
     for encoding in encodings:
         try:
-            # 对于 latin-1 等编码，可能产生乱码但不会抛异常
             content = file_path.read_text(encoding=encoding, errors='strict')
-            # 简单检查：如果包含大量替换字符，可能是编码错误
             if encoding in ['latin-1', 'cp1252'] and '\ufffd' in content:
                 continue
             return content
@@ -267,7 +258,6 @@ def _read_file_with_encoding(file_path: Path, max_size: int = 1024 * 1024) -> Op
             logger.debug(f"使用 {encoding} 读取失败: {e}")
             continue
     
-    # 最后尝试：忽略解码错误
     try:
         return file_path.read_text(encoding='utf-8', errors='ignore')
     except Exception as e:
@@ -278,14 +268,6 @@ def _read_file_with_encoding(file_path: Path, max_size: int = 1024 * 1024) -> Op
 def _extract_nested_value(meta: dict, keys: List[str], default: Any) -> Any:
     """
     安全地从嵌套字典中提取值
-    
-    Args:
-        meta: 元数据字典
-        keys: 可能的键名列表（按优先级）
-        default: 默认值
-    
-    Returns:
-        提取的值或默认值
     """
     for key in keys:
         if not isinstance(key, str):
@@ -293,7 +275,6 @@ def _extract_nested_value(meta: dict, keys: List[str], default: Any) -> Any:
         try:
             if key in meta:
                 value = meta[key]
-                # 清理值：如果是字符串，去除空白
                 if isinstance(value, str):
                     value = value.strip()
                 if value is not None and value != "":
@@ -301,7 +282,6 @@ def _extract_nested_value(meta: dict, keys: List[str], default: Any) -> Any:
         except Exception:
             continue
     
-    # 尝试嵌套路径，如 metadata.author
     for key in keys:
         if "." in key:
             parts = key.split(".")
@@ -322,58 +302,30 @@ def _extract_nested_value(meta: dict, keys: List[str], default: Any) -> Any:
 
 
 def _sanitize_version(version: Any) -> str:
-    """
-    清理和验证版本号
-    
-    Args:
-        version: 原始版本值
-    
-    Returns:
-        有效的版本字符串
-    """
     if version is None:
         return "1.0.0"
-    
     if isinstance(version, (int, float)):
         return str(version)
-    
     if isinstance(version, str):
         version = version.strip()
-        # 基本版本号验证（允许 x.y.z 格式）
         if re.match(r'^[\d]+(\.[\d]+)*([\-\+.]?[a-zA-Z0-9]+)*$', version):
             return version
-        # 如果不符合标准格式，尝试清理
         cleaned = re.sub(r'[^\d.\-+a-zA-Z]', '', version)
         if cleaned:
             return cleaned
-    
     return "1.0.0"
 
 
 def _sanitize_author(author: Any) -> str:
-    """
-    清理作者信息
-    
-    Args:
-        author: 原始作者值
-    
-    Returns:
-        有效的作者字符串
-    """
     if author is None:
         return "Local"
-    
     if isinstance(author, str):
         author = author.strip()
         if author:
-            # 限制长度，防止异常数据
-            return author[:100] if len(author) > 100 else author
-    
+            return author[:100]
     if isinstance(author, (list, tuple)):
-        # 如果是列表，取第一个
         if author and isinstance(author[0], str):
             return author[0].strip()[:100]
-    
     return "Local"
 
 
@@ -383,15 +335,10 @@ def _build_skill_from_meta(
     meta: dict, 
     file_list: List[str]
 ) -> Skill:
-    """
-    从解析的元数据构建 Skill 对象
-    """
-    # 安全提取名称
     name = _extract_nested_value(meta, ["name", "title", "id"], skill_id)
     if not isinstance(name, str) or not name.strip():
         name = skill_id
     
-    # 安全提取描述
     description = _extract_nested_value(
         meta, 
         ["description", "desc", "summary", "about"], 
@@ -399,13 +346,11 @@ def _build_skill_from_meta(
     )
     if not isinstance(description, str):
         description = str(description) if description is not None else "Agent 智能体技能"
-    description = description[:500]  # 限制长度
+    description = description[:500]
     
-    # 安全提取版本
     version_raw = _extract_nested_value(meta, ["version", "ver"], "1.0.0")
     version = _sanitize_version(version_raw)
     
-    # 安全提取作者（支持多种格式）
     author_raw = (
         meta.get("author") 
         or meta.get("authors")
@@ -415,7 +360,6 @@ def _build_skill_from_meta(
     )
     author = _sanitize_author(author_raw)
     
-    # 限制文件列表长度，避免数据过大
     max_files = 8
     files = file_list[:max_files]
     
@@ -434,9 +378,6 @@ def _create_default_skill(
     skill_dir: Path, 
     file_list: List[str]
 ) -> Skill:
-    """
-    创建默认的 Skill 对象（当发生错误时使用）
-    """
     return Skill(
         id=skill_id,
         name=skill_id,
@@ -450,10 +391,10 @@ def _create_default_skill(
 
 def _install_skills_from_directory(source_dir: Path) -> List[str]:
     """
-    智能安装处理器：
+    智能安装处理器（增强递归扫描）：
     1. 如果 source_dir 包含 SKILL.md，视为单技能安装。
-    2. 否则，检查是否包含 skills/ 目录。
-    3. 否则，扫描所有子目录，安装包含 SKILL.md 的子目录。
+    2. 若存在 skills/ 子目录，优先从其中递归查找技能。
+    3. 递归扫描所有子目录，安装所有包含 SKILL.md 的目录。
     """
     installed_ids = []
     target_files = ["SKILL.md", "skill.md", "SKILLS.md", "skills.md"]
@@ -461,7 +402,7 @@ def _install_skills_from_directory(source_dir: Path) -> List[str]:
     def is_skill_dir(d: Path):
         return any((d / f).exists() for f in target_files)
 
-    # 1. 检查本身是否就是技能
+    # 1. 检查 source_dir 本身是否就是技能
     if is_skill_dir(source_dir):
         skill_id = source_dir.name
         dest_path = Path(SKILLS_DIR) / skill_id
@@ -470,20 +411,53 @@ def _install_skills_from_directory(source_dir: Path) -> List[str]:
         installed_ids.append(skill_id)
         return installed_ids
 
-    # 2. 检查内部是否有 skills 文件夹
+    # 2. 确定递归搜索的根目录
     search_dir = source_dir
-    multi_skills_dir = source_dir / "skills"
-    if multi_skills_dir.exists() and multi_skills_dir.is_dir():
-        search_dir = multi_skills_dir
+    skills_subdir = source_dir / "skills"
+    if skills_subdir.exists() and skills_subdir.is_dir():
+        search_dir = skills_subdir
 
-    # 3. 扫描子目录
-    for item in search_dir.iterdir():
-        if item.is_dir() and not item.name.startswith('.'):
-            if is_skill_dir(item):
-                dest_path = Path(SKILLS_DIR) / item.name
-                robust_rmtree(dest_path)
-                shutil.copytree(item, dest_path)
-                installed_ids.append(item.name)
+    # 3. 递归收集所有技能目录
+    found_skill_dirs = []
+    def find_skill_dirs(root: Path):
+        if not root.is_dir():
+            return
+        if is_skill_dir(root):
+            found_skill_dirs.append(root)
+        else:
+            # 扫描子目录（忽略隐藏文件夹）
+            try:
+                for item in sorted(root.iterdir()):
+                    if item.is_dir() and not item.name.startswith('.'):
+                        find_skill_dirs(item)
+            except PermissionError:
+                logger.warning(f"无权限访问目录: {root}")
+
+    find_skill_dirs(search_dir)
+
+    # 4. 安装找到的技能，处理 ID 冲突
+    used_ids = set()
+    for skill_dir in found_skill_dirs:
+        # 优先使用目录名作为 ID
+        skill_id = skill_dir.name
+        if skill_id in used_ids:
+            # 使用相对于 search_dir 的路径创建唯一 ID
+            try:
+                rel_path = skill_dir.relative_to(search_dir)
+                unique_id = "_".join(rel_path.parts)
+                if unique_id in used_ids:
+                    logger.warning(f"无法为冲突的技能目录生成唯一ID: {skill_dir}")
+                    continue
+                skill_id = unique_id
+            except ValueError:
+                logger.warning(f"无法计算相对路径，跳过目录: {skill_dir}")
+                continue
+        
+        dest_path = Path(SKILLS_DIR) / skill_id
+        robust_rmtree(dest_path)
+        shutil.copytree(skill_dir, dest_path)
+        installed_ids.append(skill_id)
+        used_ids.add(skill_id)
     
     return installed_ids
 
@@ -514,7 +488,7 @@ async def _process_github_install(url: str) -> Dict[str, Any]:
             if potential_path.exists():
                 target_source = potential_path
         
-        # 5. 调用统一安装器
+        # 5. 调用统一安装器（现在支持深度递归）
         ids = _install_skills_from_directory(target_source)
         
         if not ids:
@@ -548,7 +522,6 @@ async def list_skills():
     
     skills_list = []
     base = Path(SKILLS_DIR)
-    # 只遍历存在的目录
     if base.exists():
         for item in sorted(base.iterdir()):
             if item.is_dir() and not item.name.startswith('.'):
@@ -586,7 +559,6 @@ async def install_skill_github(req: GitHubSkillInstallRequest):
                 installed_ids=result["installed_ids"]
             )
         else:
-            # 返回 400 错误，前端可以捕获并显示
             raise HTTPException(
                 status_code=400, 
                 detail=result["error"]
@@ -653,7 +625,6 @@ async def get_project_skills_status(path: str):
     for item in project_skills_dir.iterdir():
         if item.is_dir() and not item.name.startswith('.'):
             installed_ids.append(item.name)
-            # 解析项目目录里的元数据
             skill_meta = get_skill_metadata(item, item.name)
             project_skills.append(skill_meta)
             
@@ -669,7 +640,6 @@ async def sync_skill_to_project(req: SkillSyncRequest):
     project_skills_dir = Path(req.project_path) / ".agent" / "skills"
     target_path = project_skills_dir / req.skill_id
 
-    # 1. 同步到项目
     if req.action == "install":
         if not global_skill_path.exists():
             raise HTTPException(status_code=404, detail="全局技能不存在，请先安装到系统")
@@ -678,17 +648,14 @@ async def sync_skill_to_project(req: SkillSyncRequest):
         shutil.copytree(global_skill_path, target_path)
         return {"status": "success", "message": f"技能 {req.skill_id} 已同步至项目"}
 
-    # 2. 从项目移除
     elif req.action == "remove":
         if target_path.exists():
             robust_rmtree(target_path)
         return {"status": "success", "message": f"技能 {req.skill_id} 已从项目移除"}
     
-    # 3. 反向同步回全局 (新增!)
     elif req.action == "sync_to_global":
         if not target_path.exists():
             raise HTTPException(status_code=404, detail="项目技能不存在，无法同步到全局")
-        # 确保全局目录存在
         Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
         robust_rmtree(global_skill_path)
         shutil.copytree(target_path, global_skill_path)
@@ -700,7 +667,6 @@ async def sync_skill_to_project(req: SkillSyncRequest):
 async def get_skills_path():
     """获取技能存储目录的绝对路径"""
     try:
-        # 确保目录存在
         abs_path = os.path.abspath(SKILLS_DIR)
         if not os.path.exists(abs_path):
             os.makedirs(abs_path, exist_ok=True)

@@ -11272,6 +11272,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     }
                 })
 
+            elif msg_type == "remove_system_prompt":
+                # 主动移除该连接之前注入的 system prompt
+                has_sent_prompt = False
+                await ws_manager.broadcast({
+                    "type": "remove_system_prompt",
+                    "data": {"id": connection_id}
+                })
+
             elif msg_type == "set_tool_input":
                 tool_input = data.get("data", {}).get("text", "")
                 await ws_manager.broadcast({

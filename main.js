@@ -1954,10 +1954,11 @@ app.on('window-all-closed', () => {
 
 // 处理渲染进程崩溃
 app.on('render-process-gone', (event, webContents, details) => {
-  console.error('渲染进程崩溃:', details)
-  dialog.showErrorBox('应用崩溃', `渲染进程异常: ${details.reason}`)
-})
-
+  console.error('渲染进程崩溃:', details);
+  console.error('退出代码:', details.exitCode, '原因:', details.reason);
+  // 将 details 写入文件以便后期分析
+  fs.appendFileSync('crash.log', JSON.stringify(details) + '\n');
+});
 // 处理主进程未捕获异常
 process.on('uncaughtException', (err) => {
   console.error('未捕获异常:', err)
