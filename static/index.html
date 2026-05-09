@@ -2082,301 +2082,347 @@ function updateElement(el, rawMarkdown, formatFn) {
                   ref="sidePanelRef"
                   :class="{ collapsed: !sidePanelOpen }" 
                   v-show="sidePanelOpen">
-                
-                <!-- ✨ 书签式标签栏 (悬浮在面板外部) -->
-                <div class="vscode-tabs-header" v-if="openedExtensions.length > 0">
-                  <!-- 固定主页书签 -->
-                  <div class="vscode-tab" :class="{ active: !currentExtension }" @click="resetToDefaultView()">
-                    <i class="fa-solid fa-shapes tab-icon"></i>
-                    <span class="tab-title">{{ t('extensionsView') || '扩展视图' }}</span>
+                  
+                  <!-- ✨ 书签式标签栏 (悬浮在面板外部) -->
+                  <div class="vscode-tabs-header" v-if="openedExtensions.length > 0">
+                      <!-- 固定主页书签 -->
+                      <div class="vscode-tab" :class="{ active: !currentExtension }" @click="resetToDefaultView()">
+                          <i class="fa-solid fa-shapes tab-icon"></i>
+                          <span class="tab-title">{{ t('extensionsView') || '扩展视图' }}</span>
+                      </div>
+
+                      <!-- 动态扩展书签 -->
+                      <div class="vscode-tab" 
+                          v-for="ext in openedExtensions" 
+                          :key="ext.id" 
+                          :class="{ active: currentExtension && currentExtension.id === ext.id }" 
+                          @click="switchExtension(ext)">
+                          <img v-if="ext.icon" :src="ext.icon" class="tab-icon ext-img-icon" />
+                          <i v-else class="fa-solid fa-puzzle-piece tab-icon"></i>
+                          <span class="tab-title">{{ ext.name }}</span>
+                          <div class="tab-close" @click.stop="closeExtensionTab(ext.id)">
+                              <i class="fa-solid fa-xmark"></i>
+                          </div>
+                      </div>
                   </div>
 
-                  <!-- 动态扩展书签 -->
-                  <div class="vscode-tab" 
-                      v-for="ext in openedExtensions" 
-                      :key="ext.id" 
-                      :class="{ active: currentExtension && currentExtension.id === ext.id }" 
-                      @click="switchExtension(ext)">
-                    <img v-if="ext.icon" :src="ext.icon" class="tab-icon ext-img-icon" />
-                    <i v-else class="fa-solid fa-puzzle-piece tab-icon"></i>
-                    <span class="tab-title">{{ ext.name }}</span>
-                    <div class="tab-close" @click.stop="closeExtensionTab(ext.id)">
-                      <i class="fa-solid fa-xmark"></i>
-                    </div>
-                  </div>
-                </div>
+                  <!-- ✨ 侧边栏实体面板 -->
+                  <div class="side-panel-body-container">
+                      <div class="side-panel-scroll" ref="messagesPanel" :style="{ overflow: 'hidden', height: '100%', position: 'relative' }">
+                          
+                          <!-- ✨ 浮动按钮层（固定于侧边栏面板，不随内容滚动） -->
+                          <button v-if="activeSideView === 'tasks' && !viewingTaskDetail" 
+                                  class="floating-back-btn" 
+                                  @click="closeTaskCenter" 
+                                  :title="t('back') || '返回'">
+                              <i class="fa-solid fa-chevron-left"></i>
+                          </button>
+                          
+                          <button v-if="activeSideView === 'tasks' && viewingTaskDetail" 
+                                  class="floating-back-btn" 
+                                  @click="closeTaskDetail" 
+                                  :title="t('back') || '返回'">
+                              <i class="fa-solid fa-chevron-left"></i>
+                          </button>
+                          
+                          <button v-if="activeSideView === 'workspace'" 
+                                  class="floating-back-btn" 
+                                  @click="activeSideView = 'list'" 
+                                  :title="t('back') || '返回'">
+                              <i class="fa-solid fa-chevron-left"></i>
+                          </button>
+                          
+                          <button v-if="activeSideView === 'toolDetail'" 
+                                  class="floating-back-btn" 
+                                  @click="closeToolBlockDetail" 
+                                  :title="t('back') || '返回'">
+                              <i class="fa-solid fa-chevron-left"></i>
+                          </button>
 
-                <!-- ✨ 侧边栏实体面板 -->
-                <div class="side-panel-body-container">
-                  <div class="side-panel-scroll" ref="messagesPanel" :style="{ overflow: 'hidden', height: '100%' }">
-                    
-                    <!-- 1. 内部视图容器 (v-show控制，为了切换不丢失状态) -->
-                    <div v-show="!currentExtension" style="height: 100%; display: flex; flex-direction: column;">
-                      
-                      <!-- 1.1 任务中心视图 (严格还原) -->
-                      <div v-if="activeSideView === 'tasks'" class="task-center-container" style="height: 100%; display: flex; flex-direction: column;">
-                          <!-- A. 详情视图 -->
-                          <div v-if="viewingTaskDetail" class="task-detail-view" style="height: 100%; display: flex; flex-direction: column;">
-                              <div class="task-center-header" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid var(--el-border-color-lighter);">
-                                  <el-button link @click="closeTaskDetail">
-                                      <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
-                                  </el-button>
-                                  <span class="header-title" style="flex: 1; text-align: center; font-weight: bold;">{{ t('taskTimeline') || '任务动态' }}</span>
-                                  <div style="width: 40px;"></div>
-                              </div>
-                              
-                              <div class="task-detail-content" style="padding: 15px; overflow-y: auto; flex: 1;">
-                                  <!-- 任务摘要卡片 -->
-                                  <div class="task-info-summary" style="padding: 0; margin-bottom: 15px;">
-                                      <el-card shadow="never" :body-style="{ padding: '12px' }" style="border-style: dashed; background: var(--el-bg-color-page);">
-                                          <div class="task-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                              <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; color: var(--el-text-color-primary);">
-                                                  <i :class="getModeIcon(viewingTaskDetail.context?.task_type)" style="margin-right: 6px; font-size: 12px; color: var(--el-color-primary);"></i>
-                                                  {{ viewingTaskDetail.title }}
-                                              </span>
-                                              <el-tag size="small" :type="getTaskStatusType(viewingTaskDetail.status)">
-                                                  {{ viewingTaskDetail.status }}
-                                              </el-tag>
-                                          </div>
-                                          <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; line-height: 1.4;">
-                                              {{ viewingTaskDetail.description }}
-                                          </div>
-                                          <div class="task-progress-bar" v-if="viewingTaskDetail.status === 'running'" style="margin-bottom: 10px;">
-                                              <el-progress :percentage="viewingTaskDetail.progress" :stroke-width="4" :show-text="false" status="success"></el-progress>
-                                          </div>
-                                          <div class="task-card-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
-                                              <span style="color: var(--el-text-color-placeholder);">
-                                                  <i class="fa-regular fa-clock"></i> {{ formatTaskTime(viewingTaskDetail.created_at) }}
-                                              </span>
-                                              <div v-if="viewingTaskDetail.result">
-                                                  <el-button type="success" @click="openTaskResult(viewingTaskDetail)">
-                                                      <i class="fa-solid fa-square-poll-vertical"></i> {{ t('viewFinalResult') || '查看最终产出' }}
-                                                  </el-button>
-                                              </div>
-                                          </div>
-                                      </el-card>
-                                  </div>
-                                  <el-divider content-position="left">{{ t('executionHistory') || '执行记录' }}</el-divider>
-                                  <div class="timeline-wrapper">
-                                      <el-empty v-if="!viewingTaskDetail.context || !viewingTaskDetail.context.history || viewingTaskDetail.context.history.length === 0" :description="t('noHistoryYet') || '暂无执行动态'"></el-empty>
-                                      <el-timeline v-else>
-                                          <el-timeline-item v-for="(log, index) in viewingTaskDetail.context.history" :key="index" :type="log.includes('❌') ? 'danger' : (log.includes('✅') ? 'success' : 'primary')" size="large">
-                                              <div class="history-log-item markdown-body" style="font-size: 13px; line-height: 1.6; background: var(--el-bg-color-page); padding: 8px 12px; border-radius: 6px;">
-                                                  <div v-html="formatMessage(log)"></div>
-                                              </div>
-                                          </el-timeline-item>
-                                          <el-timeline-item v-if="viewingTaskDetail.status === 'running'" color="#409EFF">
-                                              <template #dot><i class="fa-solid fa-spinner fa-spin"></i></template>
-                                              <div style="color: var(--el-color-primary); font-size: 13px; font-style: italic;">{{ t('taskExecuting') || '任务执行中...' }} ({{ viewingTaskDetail.progress }}%)</div>
-                                          </el-timeline-item>
-                                      </el-timeline>
-                                  </div>
-                              </div>
-                          </div>
-
-                          <!-- B. 列表视图 -->
-                          <div v-else class="task-list-view" style="height: 100%; display: flex; flex-direction: column;">
-                              <div class="task-center-header" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid var(--el-border-color-lighter);">
-                                  <el-button link @click="closeTaskCenter"><i class="fa-solid fa-chevron-left"></i> {{ t('back') }}</el-button>
-                                  <span class="header-title" style="flex: 1; text-align: center; font-weight: bold;">{{ t('taskCenter') }}</span>
-                                  <div style="width: 40px;"></div>
-                              </div>
-                              <div class="task-content-wrapper" style="flex: 1; overflow-y: auto;">
-                                  <!-- 状态 A: 未配置工作区 (还原按钮和图标) -->
-                                  <div v-if="!hasWorkspacePath" class="task-empty-state" style="padding: 60px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-                                      <el-empty :description="t('noWorkspaceConfigured')">
-                                          <template #image><i class="fa-solid fa-handshake-angle" style="font-size: 48px; color: var(--el-text-color-secondary);"></i></template>
-                                          <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('taskCenterNeedsCLI') }}</p>
-                                          <el-button type="primary" @click="jumpToCLIConfig">{{ t('goToCLIConfig') }}</el-button>
-                                      </el-empty>
-                                  </div>
-                                  <!-- 状态 B: 任务列表 -->
-                                  <div v-else class="task-list-wrapper" style="padding: 15px;">
-                                      <div class="task-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                          <span style="font-weight: bold; font-size: 14px;">{{ t('taskList') }} ({{ taskList.length }})</span>
-                                          <el-button type="primary" size="small" circle @click="openCreateTaskDialog"><i class="fa-solid fa-plus"></i></el-button>
-                                      </div>
-                                      
-                                      <!-- ✨ 100% 还原你要求的空任务占位及按钮 ✨ -->
-                                      <el-empty v-if="taskList.length === 0" :description="t('noTasks')">
-                                          <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('noTasksNotice') }}</p>
-                                          <el-button type="primary" @click="openCreateTaskDialog">
-                                              <i class="fa-solid fa-plus"></i> {{ t('createNewTask') }}
-                                          </el-button>
-                                      </el-empty>
-
-                                      <div v-for="task in taskList" :key="task.task_id" class="task-card-item" style="margin-bottom: 12px; cursor: pointer;" @click="openTaskDetailView(task)">
-                                          <el-card shadow="hover" :body-style="{ padding: '12px' }">
-                                              <div class="task-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                                  <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">
-                                                      <i :class="getModeIcon(task.context?.task_type)" style="margin-right: 4px; font-size: 12px;"></i>
-                                                      {{ task.title }}
-                                                  </span>
-                                                  <el-tag size="small" :type="getTaskStatusType(task.status)">{{ task.status }}</el-tag>
-                                              </div>
-                                              <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ task.description }}</div>
-                                              <div class="task-progress-bar" v-if="task.status === 'running'" style="margin-bottom: 10px;"><el-progress :percentage="task.progress" :stroke-width="4" :show-text="false" status="success"></el-progress></div>
-                                              <div class="task-card-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px;">
-                                                  <span style="color: var(--el-text-color-placeholder);"><i class="fa-regular fa-clock"></i> {{ formatTaskTime(task.created_at) }}</span>
-                                                  <div class="task-actions" @click.stop>
-                                                      <el-button type="info" link size="small" @click.stop="openEditTaskDialog(task)"><i class="fa-solid fa-pen-to-square"></i></el-button>
-                                                      <el-button v-if="['pending', 'running'].includes(task.status)" type="warning" link size="small" @click.stop="handleCancelTask(task.task_id)"><i class="fa-solid fa-stop"></i></el-button>
-                                                      <el-button type="danger" link size="small" @click.stop="handleDeleteTask(task.task_id)"><i class="fa-solid fa-trash-can"></i></el-button>
-                                                  </div>
-                                              </div>
-                                          </el-card>
-                                      </div>
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-
-                      <!-- 1.2 工作区视图 (严格还原) -->
-                      <div v-else-if="activeSideView === 'workspace'" class="workspace-center-container" style="height: 100%; display: flex; flex-direction: column;">
-                          <div class="workspace-header" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid var(--el-border-color-lighter);">
-                              <el-button link @click="activeSideView = 'list'"><i class="fa-solid fa-chevron-left"></i> {{ t('back') }}</el-button>
-                              <span class="header-title" style="flex: 1; text-align: center; font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                  {{ CLISettings.cc_path ? CLISettings.cc_path.split(/[/\\]/).filter(Boolean).pop() : (t('workspace') || '工作区') }}
-                              </span>
-                              <el-button link @click="handleRootUpload" style="width: 30px; padding: 0;"><i class="fa-solid fa-cloud-arrow-up"></i></el-button>
-                              <el-button link @click="refreshWorkspaceTree" style="width: 40px;"><i class="fa-solid fa-rotate-right"></i></el-button>
-                          </div>
-                          <div class="workspace-content-wrapper" style="flex: 1; overflow-y: auto;">
-                              <!-- ✨ 100% 还原你要求的工作区空提示及按钮 ✨ -->
-                              <div v-if="!CLISettings.cc_path" style="padding: 40px 20px; text-align: center;">
-                                  <el-empty :description="t('noWorkspaceConfigured')">
-                                      <el-button type="primary" @click="browseDirectory">选择文件夹</el-button>
-                                  </el-empty>
-                              </div>
-                              <div v-else style="padding: 10px; height: 100%; box-sizing: border-box;">
-                                  <el-tree :key="workspaceTreeKey" ref="workspaceTreeRef" :data="workspaceTreeData" :props="workspaceTreeProps" node-key="path" lazy :load="loadWorkspaceNode" :expand-on-click-node="false" :indent="24" class="large-workspace-tree" style="background: transparent;">
-                                      <template #default="{ node, data }">
-                                          <div class="workspace-tree-node" style="display: flex; flex: 1; align-items: center; justify-content: space-between; font-size: 13px; padding-right: 8px;">
-                                              <div class="node-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" @dblclick="data.isDirectory ? null : openWorkspaceFile(data.path)" @click="data.isDirectory ? (node.expanded = !node.expanded) : handleFileShortcut(data.path)">
-                                                  <i :class="data.isDirectory ? (node.expanded ? 'fa-solid fa-folder-open' : 'fa-solid fa-folder') : 'fa-regular fa-file-lines'" :style="{ color: data.isDirectory ? '#E6A23C' : 'var(--el-text-color-regular)' }"></i>
-                                                  <span>{{ node.label }}</span>
-                                              </div>
-                                              <div class="node-actions">
-                                                  <el-button v-if="data.isDirectory" link size="small" @click.stop="handleFolderUpload(data.path)"><i class="fa-solid fa-file-circle-plus"></i></el-button>
-                                                  <el-button v-if="!data.isDirectory" link size="small" @click.stop="openWorkspaceFile(data.path)"><i class="fa-solid fa-arrow-up-right-from-square"></i></el-button>
-                                                  <el-button link type="danger" size="small" @click.stop="deleteWorkspaceFile(data, node)"><i class="fa-solid fa-trash-can"></i></el-button>
-                                              </div>
-                                          </div>
-                                      </template>
-                                  </el-tree>
-                              </div>
-                          </div>
-                      </div>
-
-                      <!-- 1.3 工具详情视图 (新增) -->
-                      <div v-else-if="activeSideView === 'toolDetail'" class="tool-detail-view" style="padding: 16px; height: 100%; overflow-y: auto;">
-                          <div class="workspace-header" style="padding: 8px; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; align-items: center;">
-                              <el-button link @click="closeToolBlockDetail">
-                                  <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
-                              </el-button>
-                              <span style="flex:1; text-align:center; font-weight:bold;">{{ t('toolDetail') }}</span>
-                              <div style="width:40px;"></div>
-                          </div>
-                          <div v-if="activeToolBlock" style="padding: 20px;">
-                              <div class="sap-process-block" :class="'type-' + activeToolBlock.block.type" style="margin: 0; border-radius: 12px;">
-                                  <div class="sp-header">
-                                      <i :class="getToolBlockIcon(activeToolBlock.block.type)"></i>
-                                      <span>{{ activeToolBlock.block.name || activeToolBlock.block.type }}</span>
-                                  </div>
-                                  <div class="sp-content" v-morph:format="formatToolBlockContent(activeToolBlock.block)"></div>
-                              </div>
-                          </div>
-                          <el-empty v-else :description="t('noBlockSelected')" />
-                      </div>
-
-                      <!-- 1.4 扩展列表视图 (严格还原卡片及收藏逻辑) -->
-                      <div v-else class="extensions-list" style="margin: 10px; height: 100%; overflow-y: auto;">
-                        <el-card class="extension-card default-view-card" :class="{ active: currentExtension === null && activeSideView === 'list' }" @click="resetToDefaultView();expandChatArea();collapseSidePanel();">
-                          <div class="extension-info"><h3>{{ t('defaultView') }}</h3><p>{{ t('defaultViewDescription') }}</p></div>
-                        </el-card>
-                        <el-card class="extension-card task-center-card" @click="openTaskCenter()">
-                          <div class="extension-info"><h3>{{ t('taskCenter') }}</h3><p>{{ t('taskCenterDescription') }}</p></div>
-                        </el-card>
-                        <el-card class="extension-card workspace-card" @click="openWorkspace()" v-show="isElectron">
-                          <div class="extension-info"><h3>{{ t('workspace') || '工作区文件' }}</h3><p>{{ t('workspaceDescription') || '管理与查看本地工作区文件树' }}</p></div>
-                        </el-card>
-                        <!-- 分隔线 -->
-                        <div class="extensions-divider" style="margin-bottom: 12px;">
-                          <span>
-                            {{ t('availableExtensions') }}
-                          </span>
-                        </div>
-
-                        <!-- ✨ 搜索与操作工具栏 ✨ -->
-                        <div class="extensions-toolbar" style="display: flex; align-items: center; margin-bottom: 15px; gap: 10px; flex-wrap: nowrap;">
-                          <!-- 左侧：搜索框 (使用包裹层防止撑破 flex 布局) -->
-                          <div style="flex: 1; min-width: 0;">
-                            <el-input 
-                              v-model="searchExtensionQuery" 
-                              :placeholder="t('search') || '搜索扩展...'" 
-                              clearable
-                              style="width: 100%;"
-                            >
-                              <template #prefix>
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                              </template>
-                            </el-input>
+                          <!-- 工作区右上角操作按钮组 -->
+                          <div v-if="activeSideView === 'workspace'" class="floating-actions-group">
+                              <button class="floating-action-btn" @click="handleRootUpload" :title="t('upload') || '上传'">
+                                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                              </button>
+                              <button class="floating-action-btn" @click="refreshWorkspaceTree" :title="t('refresh') || '刷新'">
+                                  <i class="fa-solid fa-rotate-right"></i>
+                              </button>
                           </div>
                           
-                          <!-- 右侧：跳转按钮 (flex-shrink: 0 防止按钮被压缩) -->
-                          <el-button 
-                            type="primary" 
-                            :style="{color: '#fff'}"
-                            plain
-                            style="flex-shrink: 0;"
-                            @click.stop.prevent="switchToExtensionPage();showExtensionsDialog = false"
-                          >
-                            <i class="fa-solid fa-puzzle-piece" style="margin-right: 5px;"></i>
-                            {{ t('goToExtensionPage') }}
-                          </el-button>
-                        </div>
+                          <!-- ✨ 浮动按钮层（固定于侧边栏面板，不随内容滚动） -->
+                          <!-- 任务列表视图：返回按钮 + 右上角新建按钮 -->
+                          <template v-if="activeSideView === 'tasks' && !viewingTaskDetail">
+                              <button class="floating-back-btn" @click="closeTaskCenter" :title="t('back') || '返回'">
+                                  <i class="fa-solid fa-chevron-left"></i>
+                              </button>
+                              <div class="floating-actions-group">
+                                  <button class="floating-action-btn" @click="openCreateTaskDialog" :title="t('createNewTask') || '新建任务'">
+                                      <i class="fa-solid fa-plus"></i>
+                                  </button>
+                              </div>
+                          </template>
 
-                        <!-- 扩展列表 -->
-                        <el-empty v-if="filteredExtensions.length === 0" :description="t('noExtensionsFound')" ></el-empty>
-                        <el-card v-for="ext in filteredExtensions" :key="ext.id" class="extension-card" :class="{ active: currentExtension && currentExtension.id === ext.id }" @click="switchExtension(ext)">
-                            <div class="btn-top-right" @click.stop>
-                              <el-tooltip :content="favoriteExtensionIds.includes(ext.id) ? t('unfavorite') : t('favorite')" placement="top">
-                                <el-button type="default" circle size="small" @click.stop.prevent="toggleFavoriteExtension(ext)">
-                                  <i :class="favoriteExtensionIds.includes(ext.id) ? 'fa-solid fa-star star-active' : 'fa-regular fa-star'"></i>
-                                </el-button>
-                              </el-tooltip>
-                              <el-tooltip :content="t('openExtensionInBrowser')" placement="top">
-                                <el-button type="default" circle size="small" @click.stop.prevent="openExtension(ext)" style="margin-left: 8px;"><i class="fa-solid fa-external-link"></i></el-button>
-                              </el-tooltip>
-                              <el-tooltip v-if="isElectron" :content="t('openExtensionInWindow')" placement="top">
-                                <el-button type="primary" circle size="small" @click.stop.prevent="openExtensionInWindow(ext)" style="margin-left: 8px;"><i class="fa-solid fa-window-restore"></i></el-button>
-                              </el-tooltip>
-                            </div>
-                            <div class="extension-info"><h3>{{ ext.name }}</h3><p>{{ ext.description }}</p><div class="extension-meta"><span>v{{ ext.version }}</span><span>{{ ext.author }}</span></div></div>
-                        </el-card>
-                      </div>
-                    </div> 
+                          <!-- 任务详情视图：仅返回按钮 -->
+                          <button v-if="activeSideView === 'tasks' && viewingTaskDetail" 
+                                  class="floating-back-btn" 
+                                  @click="closeTaskDetail" 
+                                  :title="t('back') || '返回'">
+                              <i class="fa-solid fa-chevron-left"></i>
+                          </button>
 
-                    <!-- 2. 已打开的扩展 Iframe 多开视图 (后台状态驻留) -->
-                    <template v-for="ext in openedExtensions" :key="ext.id">
-                      <div v-show="currentExtension && currentExtension.id === ext.id" class="ext-iframe-wrapper" style="height: 100%;">
-                          <div class="ext-floating-close-btn" :class="{ 'is-active': extButtonVisible }" @mousemove="handleExtMouseMove" @click="resetToDefaultView()" :title="t('backToDefaultView') || '返回默认视图'">
-                              <i class="fa-solid fa-arrow-left"></i> 
+                          <!-- 工作区视图：返回按钮 + 右上角操作组（上传/刷新） -->
+                          <template v-if="activeSideView === 'workspace'">
+                              <button class="floating-back-btn" @click="activeSideView = 'list'" :title="t('back') || '返回'">
+                                  <i class="fa-solid fa-chevron-left"></i>
+                              </button>
+                              <div class="floating-actions-group">
+                                  <button class="floating-action-btn" @click="handleRootUpload" :title="t('upload') || '上传'">
+                                      <i class="fa-solid fa-cloud-arrow-up"></i>
+                                  </button>
+                                  <button class="floating-action-btn" @click="refreshWorkspaceTree" :title="t('refresh') || '刷新'">
+                                      <i class="fa-solid fa-rotate-right"></i>
+                                  </button>
+                              </div>
+                          </template>
+
+                          <!-- 工具详情视图：仅返回按钮 -->
+                          <button v-if="activeSideView === 'toolDetail'" 
+                                  class="floating-back-btn" 
+                                  @click="closeToolBlockDetail" 
+                                  :title="t('back') || '返回'">
+                              <i class="fa-solid fa-chevron-left"></i>
+                          </button>
+
+                          <!-- 1. 内部视图容器 (v-show控制，为了切换不丢失状态) -->
+                          <div v-show="!currentExtension" style="height: 100%; display: flex; flex-direction: column;">
+                              
+                              <!-- 1.1 任务中心视图 (无顶部条，浮动返回按钮) -->
+                              <div v-if="activeSideView === 'tasks'" class="task-center-container" style="height: 100%; display: flex; flex-direction: column; position: relative;">
+
+                                  <!-- A. 详情视图 -->
+                                  <div v-if="viewingTaskDetail" class="task-detail-view" style="height: 100%; display: flex; flex-direction: column; padding: 48px 16px 16px 16px;">
+                                      
+                                      <div class="task-detail-content" style="padding: 8px 0 0 0; overflow-y: auto; flex: 1;">
+                                          <!-- 任务摘要卡片 - 内嵌标题 -->
+                                          <div class="task-info-summary" style="padding: 0; margin-bottom: 15px;">
+                                              <el-card shadow="never" :body-style="{ padding: '14px 16px' }" style="border-style: dashed; background: var(--el-bg-color-page); border-radius: 12px;">
+                                                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                                                      <i :class="getModeIcon(viewingTaskDetail.context?.task_type)" style="font-size: 15px; color: var(--el-color-primary); flex-shrink: 0;"></i>
+                                                      <span style="font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--el-text-color-primary);">
+                                                          {{ viewingTaskDetail.title }}
+                                                      </span>
+                                                      <el-tag size="small" :type="getTaskStatusType(viewingTaskDetail.status)" style="flex-shrink: 0;">
+                                                          {{ viewingTaskDetail.status }}
+                                                      </el-tag>
+                                                  </div>
+                                                  <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; line-height: 1.5;">
+                                                      {{ viewingTaskDetail.description }}
+                                                  </div>
+                                                  <div class="task-progress-bar" v-if="viewingTaskDetail.status === 'running'" style="margin-bottom: 10px;">
+                                                      <el-progress :percentage="viewingTaskDetail.progress" :stroke-width="4" :show-text="false" status="success"></el-progress>
+                                                  </div>
+                                                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                                                      <span style="color: var(--el-text-color-placeholder);">
+                                                          <i class="fa-regular fa-clock"></i> {{ formatTaskTime(viewingTaskDetail.created_at) }}
+                                                      </span>
+                                                      <el-button v-if="viewingTaskDetail.result" type="success" size="small" @click="openTaskResult(viewingTaskDetail)" style="border-radius: 20px;">
+                                                          <i class="fa-solid fa-square-poll-vertical"></i> {{ t('viewFinalResult') || '查看最终产出' }}
+                                                      </el-button>
+                                                  </div>
+                                              </el-card>
+                                          </div>
+                                          <el-divider content-position="left" style="margin: 12px 0;">{{ t('executionHistory') || '执行记录' }}</el-divider>
+                                          <div class="timeline-wrapper">
+                                              <el-empty v-if="!viewingTaskDetail.context || !viewingTaskDetail.context.history || viewingTaskDetail.context.history.length === 0" :description="t('noHistoryYet') || '暂无执行动态'"></el-empty>
+                                              <el-timeline v-else>
+                                                  <el-timeline-item v-for="(log, index) in viewingTaskDetail.context.history" :key="index" :type="log.includes('❌') ? 'danger' : (log.includes('✅') ? 'success' : 'primary')" size="large">
+                                                      <div class="history-log-item markdown-body" style="font-size: 13px; line-height: 1.6; background: var(--el-bg-color-page); padding: 8px 12px; border-radius: 6px;">
+                                                          <div v-html="formatMessage(log)"></div>
+                                                      </div>
+                                                  </el-timeline-item>
+                                                  <el-timeline-item v-if="viewingTaskDetail.status === 'running'" color="#409EFF">
+                                                      <template #dot><i class="fa-solid fa-spinner fa-spin"></i></template>
+                                                      <div style="color: var(--el-color-primary); font-size: 13px; font-style: italic;">{{ t('taskExecuting') || '任务执行中...' }} ({{ viewingTaskDetail.progress }}%)</div>
+                                                  </el-timeline-item>
+                                              </el-timeline>
+                                          </div>
+                                      </div>
+                                  </div>
+
+                                  <!-- B. 列表视图 -->
+                                  <div v-else class="task-list-view" style="height: 100%; display: flex; flex-direction: column; padding: 48px 16px 16px 16px;">
+                                      <div class="task-content-wrapper" style="flex: 1; overflow-y: auto;">
+                                          <!-- 状态 A: 未配置工作区 -->
+                                          <div v-if="!hasWorkspacePath" class="task-empty-state" style="padding: 60px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                                              <el-empty :description="t('noWorkspaceConfigured')">
+                                                  <template #image><i class="fa-solid fa-handshake-angle" style="font-size: 48px; color: var(--el-text-color-secondary);"></i></template>
+                                                  <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('taskCenterNeedsCLI') }}</p>
+                                                  <el-button type="primary" @click="jumpToCLIConfig" style="border-radius: 20px;">{{ t('goToCLIConfig') }}</el-button>
+                                              </el-empty>
+                                          </div>
+                                          <!-- 状态 B: 任务列表 -->
+                                          <div v-else class="task-list-wrapper">
+                                              
+                                              <el-empty v-if="taskList.length === 0" :description="t('noTasks')" style="padding: 30px 0;">
+                                                  <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('noTasksNotice') }}</p>
+                                                  <el-button type="primary" @click="openCreateTaskDialog" style="border-radius: 20px;">
+                                                      <i class="fa-solid fa-plus"></i> {{ t('createNewTask') }}
+                                                  </el-button>
+                                              </el-empty>
+
+                                              <div v-for="task in taskList" :key="task.task_id" class="task-card-item" style="margin-bottom: 12px; cursor: pointer;" @click="openTaskDetailView(task)">
+                                                  <el-card shadow="hover" :body-style="{ padding: '12px' }" style="border-radius: 12px;">
+                                                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                                          <span style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; font-size: 13px;">
+                                                              <i :class="getModeIcon(task.context?.task_type)" style="margin-right: 5px; font-size: 11px; color: var(--el-color-primary);"></i>
+                                                              {{ task.title }}
+                                                          </span>
+                                                          <el-tag size="small" :type="getTaskStatusType(task.status)">{{ task.status }}</el-tag>
+                                                      </div>
+                                                      <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ task.description }}</div>
+                                                      <div class="task-progress-bar" v-if="task.status === 'running'" style="margin-bottom: 8px;"><el-progress :percentage="task.progress" :stroke-width="4" :show-text="false" status="success"></el-progress></div>
+                                                      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                                                          <span style="color: var(--el-text-color-placeholder);"><i class="fa-regular fa-clock"></i> {{ formatTaskTime(task.created_at) }}</span>
+                                                          <div class="task-actions" @click.stop style="display: flex; gap: 2px;">
+                                                              <el-button type="info" link size="small" @click.stop="openEditTaskDialog(task)"><i class="fa-solid fa-pen-to-square"></i></el-button>
+                                                              <el-button v-if="['pending', 'running'].includes(task.status)" type="warning" link size="small" @click.stop="handleCancelTask(task.task_id)"><i class="fa-solid fa-stop"></i></el-button>
+                                                              <el-button type="danger" link size="small" @click.stop="handleDeleteTask(task.task_id)"><i class="fa-solid fa-trash-can"></i></el-button>
+                                                          </div>
+                                                      </div>
+                                                  </el-card>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+
+                              <!-- 1.2 工作区视图 (无顶部条，浮动按钮) -->
+                              <div v-else-if="activeSideView === 'workspace'" class="workspace-center-container" style="height: 100%; display: flex; flex-direction: column; position: relative;">
+
+
+                                  <div class="workspace-content-wrapper" style="flex: 1; overflow-y: auto; padding: 48px 16px 16px 16px;">
+                                      <div v-if="!CLISettings.cc_path" style="padding: 40px 20px; text-align: center;">
+                                          <el-empty :description="t('noWorkspaceConfigured')">
+                                              <el-button type="primary" @click="browseDirectory" style="border-radius: 20px;">选择文件夹</el-button>
+                                          </el-empty>
+                                      </div>
+                                      <div v-else style="height: 100%; box-sizing: border-box;">
+                                          <el-tree :key="workspaceTreeKey" ref="workspaceTreeRef" :data="workspaceTreeData" :props="workspaceTreeProps" node-key="path" lazy :load="loadWorkspaceNode" :expand-on-click-node="false" :indent="24" class="large-workspace-tree" style="background: transparent;">
+                                              <template #default="{ node, data }">
+                                                  <div class="workspace-tree-node" style="display: flex; flex: 1; align-items: center; justify-content: space-between; font-size: 13px; padding-right: 8px;">
+                                                      <div class="node-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" @dblclick="data.isDirectory ? null : openWorkspaceFile(data.path)" @click="data.isDirectory ? (node.expanded = !node.expanded) : handleFileShortcut(data.path)">
+                                                          <i :class="data.isDirectory ? (node.expanded ? 'fa-solid fa-folder-open' : 'fa-solid fa-folder') : 'fa-regular fa-file-lines'" :style="{ color: data.isDirectory ? '#E6A23C' : 'var(--el-text-color-regular)' }"></i>
+                                                          <span>{{ node.label }}</span>
+                                                      </div>
+                                                      <div class="node-actions">
+                                                          <el-button v-if="data.isDirectory" link size="small" @click.stop="handleFolderUpload(data.path)"><i class="fa-solid fa-file-circle-plus"></i></el-button>
+                                                          <el-button v-if="!data.isDirectory" link size="small" @click.stop="openWorkspaceFile(data.path)"><i class="fa-solid fa-arrow-up-right-from-square"></i></el-button>
+                                                          <el-button link type="danger" size="small" @click.stop="deleteWorkspaceFile(data, node)"><i class="fa-solid fa-trash-can"></i></el-button>
+                                                      </div>
+                                                  </div>
+                                              </template>
+                                          </el-tree>
+                                      </div>
+                                  </div>
+                              </div>
+
+                              <!-- 1.3 工具详情视图 (无顶部条，浮动返回按钮) -->
+                              <div v-else-if="activeSideView === 'toolDetail'" class="tool-detail-view" style="height: 100%; overflow-y: auto; padding: 48px 16px 16px 16px;">
+                                  
+
+                                  <div v-if="activeToolBlock" style="padding: 8px 0 0 0;">
+                                      <div class="sp-header">
+                                          <i :class="getToolBlockIcon(activeToolBlock.block.type)"></i>
+                                          <span>{{ activeToolBlock.block.name || activeToolBlock.block.type }}</span>
+                                      </div>
+                                      <div class="sp-content" v-morph:format="formatToolBlockContent(activeToolBlock.block)"></div>
+                                  </div>
+                                  <el-empty v-else :description="t('noBlockSelected')" style="margin-top: 40px;" />
+                              </div>
+
+                              <!-- 1.4 扩展列表视图 (保持原有设计) -->
+                              <div v-else class="extensions-list" style="margin: 10px; height: 100%; overflow-y: auto;">
+                                  <el-card class="extension-card default-view-card" :class="{ active: currentExtension === null && activeSideView === 'list' }" @click="resetToDefaultView();expandChatArea();collapseSidePanel();">
+                                      <div class="extension-info"><h3>{{ t('defaultView') }}</h3><p>{{ t('defaultViewDescription') }}</p></div>
+                                  </el-card>
+                                  <el-card class="extension-card task-center-card" @click="openTaskCenter()">
+                                      <div class="extension-info"><h3>{{ t('taskCenter') }}</h3><p>{{ t('taskCenterDescription') }}</p></div>
+                                  </el-card>
+                                  <el-card class="extension-card workspace-card" @click="openWorkspace()" v-show="isElectron">
+                                      <div class="extension-info"><h3>{{ t('workspace') || '工作区文件' }}</h3><p>{{ t('workspaceDescription') || '管理与查看本地工作区文件树' }}</p></div>
+                                  </el-card>
+                                  <!-- 分隔线 -->
+                                  <div class="extensions-divider" style="margin-bottom: 12px;">
+                                      <span>{{ t('availableExtensions') }}</span>
+                                  </div>
+
+                                  <!-- 搜索与操作工具栏 -->
+                                  <div class="extensions-toolbar" style="display: flex; align-items: center; margin-bottom: 15px; gap: 10px; flex-wrap: nowrap;">
+                                      <div style="flex: 1; min-width: 0;">
+                                          <el-input 
+                                              v-model="searchExtensionQuery" 
+                                              :placeholder="t('search') || '搜索扩展...'" 
+                                              clearable
+                                              style="width: 100%;"
+                                          >
+                                              <template #prefix>
+                                                  <i class="fa-solid fa-magnifying-glass"></i>
+                                              </template>
+                                          </el-input>
+                                      </div>
+                                      <el-button 
+                                          type="primary" 
+                                          :style="{color: '#fff'}"
+                                          plain
+                                          style="flex-shrink: 0;"
+                                          @click.stop.prevent="switchToExtensionPage();showExtensionsDialog = false"
+                                      >
+                                          <i class="fa-solid fa-puzzle-piece" style="margin-right: 5px;"></i>
+                                          {{ t('goToExtensionPage') }}
+                                      </el-button>
+                                  </div>
+
+                                  <!-- 扩展列表 -->
+                                  <el-empty v-if="filteredExtensions.length === 0" :description="t('noExtensionsFound')" ></el-empty>
+                                  <el-card v-for="ext in filteredExtensions" :key="ext.id" class="extension-card" :class="{ active: currentExtension && currentExtension.id === ext.id }" @click="switchExtension(ext)">
+                                      <div class="btn-top-right" @click.stop>
+                                          <el-tooltip :content="favoriteExtensionIds.includes(ext.id) ? t('unfavorite') : t('favorite')" placement="top">
+                                              <el-button type="default" circle size="small" @click.stop.prevent="toggleFavoriteExtension(ext)">
+                                                  <i :class="favoriteExtensionIds.includes(ext.id) ? 'fa-solid fa-star star-active' : 'fa-regular fa-star'"></i>
+                                              </el-button>
+                                          </el-tooltip>
+                                          <el-tooltip :content="t('openExtensionInBrowser')" placement="top">
+                                              <el-button type="default" circle size="small" @click.stop.prevent="openExtension(ext)" style="margin-left: 8px;"><i class="fa-solid fa-external-link"></i></el-button>
+                                          </el-tooltip>
+                                          <el-tooltip v-if="isElectron" :content="t('openExtensionInWindow')" placement="top">
+                                              <el-button type="primary" circle size="small" @click.stop.prevent="openExtensionInWindow(ext)" style="margin-left: 8px;"><i class="fa-solid fa-window-restore"></i></el-button>
+                                          </el-tooltip>
+                                      </div>
+                                      <div class="extension-info"><h3>{{ ext.name }}</h3><p>{{ ext.description }}</p><div class="extension-meta"><span>v{{ ext.version }}</span><span>{{ ext.author }}</span></div></div>
+                                  </el-card>
+                              </div>
+                          </div> 
+
+                          <!-- 2. 已打开的扩展 Iframe 多开视图 -->
+                          <template v-for="ext in openedExtensions" :key="ext.id">
+                              <div v-show="currentExtension && currentExtension.id === ext.id" class="ext-iframe-wrapper" style="height: 100%;">
+                                  <div class="ext-floating-close-btn" :class="{ 'is-active': extButtonVisible }" @mousemove="handleExtMouseMove" @click="resetToDefaultView()" :title="t('backToDefaultView') || '返回默认视图'">
+                                      <i class="fa-solid fa-arrow-left"></i> 
+                                  </div>
+                                  <iframe class="side-panel-iframe" :src="ext.iframeUrl || (currentExtension.id === ext.id ? sidePanelURL : '')" frameborder="0" allowfullscreen></iframe>
+                              </div>
+                          </template>
+
+                          <!-- 3. 加载中状态 -->
+                          <div v-show="currentExtension && (!currentExtension.iframeUrl && !sidePanelURL)" class="loading-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--el-bg-color-page); z-index: 10;">
+                              <div class="loading-content">
+                                  <i class="fa-solid fa-spinner fa-spin loading-icon"></i>
+                                  <p class="loading-text">{{t('waitForLoadingExt')}}</p>
+                              </div>
                           </div>
-                          <iframe class="side-panel-iframe" :src="ext.iframeUrl || (currentExtension.id === ext.id ? sidePanelURL : '')" frameborder="0" allowfullscreen></iframe>
-                      </div>
-                    </template>
 
-                    <!-- 3. 加载中状态 (全局共用) -->
-                    <div v-show="currentExtension && (!currentExtension.iframeUrl && !sidePanelURL)" class="loading-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--el-bg-color-page); z-index: 10;">
-                      <div class="loading-content">
-                        <i class="fa-solid fa-spinner fa-spin loading-icon"></i>
-                        <p class="loading-text">{{t('waitForLoadingExt')}}</p>
                       </div>
-                    </div>
-
                   </div>
-                </div>
               </div>
 
               <!-- 任务结果 Dialog：优化为支持历史切换 -->

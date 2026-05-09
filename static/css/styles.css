@@ -12420,3 +12420,141 @@ pre.sp-content.sp-code {
     padding: 10px 0;
     max-width: 100%;
 }
+
+/* =========================================
+   固定在侧边栏面板的导航按钮（不随内容滚动）
+   ========================================= */
+
+/* 1. 浮动返回按钮 - 左上角 */
+.floating-back-btn {
+  position: absolute;        /* 相对于 .side-panel-scroll 定位 */
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  
+  /* 磨砂玻璃质感 */
+  background-color: color-mix(in srgb, var(--el-bg-color) 75%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+  
+  opacity: 0.85;
+  pointer-events: auto;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.floating-back-btn:hover {
+  opacity: 1;
+  background-color: var(--el-color-primary);
+  color: #ffffff;
+  border-color: var(--el-color-primary);
+  transform: translateX(-2px) scale(1.05);
+  box-shadow: 0 4px 16px rgba(var(--el-color-primary-rgb), 0.35);
+}
+
+.floating-back-btn:active {
+  transform: translateX(-2px) scale(0.92);
+  transition-duration: 0.1s;
+}
+
+/* 2. 浮动操作按钮组 - 右上角 */
+.floating-actions-group {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  gap: 6px;
+}
+
+/* 单个浮动操作按钮 */
+.floating-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  
+  background-color: color-mix(in srgb, var(--el-bg-color) 75%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  
+  opacity: 0.8;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.floating-action-btn:hover {
+  opacity: 1;
+  background-color: var(--el-bg-color);
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary-light-5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.floating-action-btn:active {
+  transform: translateY(0) scale(0.92);
+  transition-duration: 0.1s;
+}
+
+/* 3. 暗色主题适配 */
+[data-theme="dark"] .floating-back-btn,
+[data-theme="midnight"] .floating-back-btn,
+[data-theme="neon"] .floating-back-btn {
+  background-color: color-mix(in srgb, var(--el-bg-color) 70%, transparent);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .floating-action-btn,
+[data-theme="midnight"] .floating-action-btn,
+[data-theme="neon"] .floating-action-btn {
+  background-color: color-mix(in srgb, var(--el-bg-color) 70%, transparent);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 4. 确保侧边栏滚动容器支持固定定位 */
+.side-panel-scroll {
+  position: relative;   /* 作为浮动按钮的定位锚点 */
+}
+
+/* 5. 移动端适配 */
+@media (max-width: 768px) {
+  .floating-back-btn {
+    top: 8px;
+    left: 8px;
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+  
+  .floating-actions-group {
+    top: 8px;
+    right: 8px;
+    gap: 4px;
+  }
+  
+  .floating-action-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+}
