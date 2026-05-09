@@ -3213,10 +3213,7 @@ let vue_methods = {
     getVisibleBlocks(msg) {
         if (!msg.displayBlocks || !msg.displayBlocks.length) return [];
         const blocks = msg.displayBlocks;
-        // 如果块总数未超过限制，全量渲染
-        if (blocks.length <= MAX_RENDERED_BLOCKS) return blocks;
-        // 否则只渲染最后 MAX_RENDERED_BLOCKS 个（因为新内容在尾部）
-        return blocks.slice(-MAX_RENDERED_BLOCKS);
+        return blocks;
     },
 
     // === 辅助函数 ===
@@ -3361,6 +3358,12 @@ let vue_methods = {
         }
         const newBlock = { type, id, name, content: '', args: '', data: null };
         msg.displayBlocks.push(newBlock);
+
+        // 🔥 关键：添加新块后立即裁剪，只保留最后 MAX_RENDERED_BLOCKS 个块
+        if (msg.displayBlocks.length > MAX_RENDERED_BLOCKS) {
+            msg.displayBlocks.splice(0, msg.displayBlocks.length - MAX_RENDERED_BLOCKS);
+        }
+
         return newBlock;
     },
 

@@ -3031,6 +3031,97 @@ def ensure_thinking_fields(messages):
                 setattr(msg, "reasoning_content", "")
     
     return messages
+
+def sanitize_tool_calls(messages: list) -> list:
+    """
+    最终兜底：确保任意一条带有 tool_calls 的 assistant 消息
+    后面都紧跟着数量匹配的 tool 消息，且 tool_call_id 一一对应。
+    
+    - 如果 content 为空且 tool_calls 缺少对应的 tool 响应 → 直接删除整条 assistant
+    - 如果 content 不为空但 tool_calls 缺少对应的 tool 响应 → 抹掉 tool_calls，保留文本
+    - 如果 tool 消息找不到对应的 assistant tool_calls → 删除孤立的 tool 消息
+    """
+    if not messages:
+        return messages
+
+    # 统一转成易处理的格式
+    msgs = []
+    for m in messages:
+        if isinstance(m, dict):
+            msgs.append(m.copy())
+        else:
+            # 简单转为字典（你的消息大概率已经是 dict）
+            msgs.append(m)
+
+    i = 0
+    while i < len(msgs):
+        msg = msgs[i]
+        role = msg.get("role")
+        
+        if role == "assistant" and msg.get("tool_calls"):
+            # 收集该 assistant 应该有的所有 tool_call_id
+            expected_ids = {tc["id"] for tc in msg["tool_calls"]}
+            
+            # 找到紧随其后的连续 tool 消息
+            j = i + 1
+            tool_msgs = []
+            while j < len(msgs) and msgs[j].get("role") == "tool":
+                tool_msgs.append(msgs[j])
+                j += 1
+            
+            # 检查是否有缺失
+            found_ids = {tm["tool_call_id"] for tm in tool_msgs if "tool_call_id" in tm}
+            missing_ids = expected_ids - found_ids
+            
+            if missing_ids:
+                # 判断 assistant 是否有实际文字内容
+                content = msg.get("content")
+                has_text = bool(content and str(content).strip())
+                
+                if has_text:
+                    # 保留文字，抹掉 tool_calls
+                    msgs[i]["tool_calls"] = None
+                    # 同时删除后面那些已经找到的孤立的 tool 消息（因为它们现在没有对应的 assistant tool_calls 了）
+                    del msgs[i+1:j]  # 删除 i+1 到 j-1 的所有 tool 消息
+                    print(f"[Sanitizer] 抹除 assistant 的 tool_calls 并移除相关 tool 消息，保留文本。缺失 id: {missing_ids}")
+                else:
+                    # 没有实质内容，直接删除这条 assistant 和它带的无效 tool 消息
+                    del msgs[i]        # 删除 assistant 本身
+                    # 注意 j 在删除 i 之后会前移一位，所以要重新计算
+                    # 删除原来跟在它后面的 tool 消息
+                    # i 已经指向原来 i+1 的位置（因为删了 i），所以删除从 i 到 j-1
+                    del msgs[i:j-1]    # 因为 i 已经指向了原来 i+1，所以删除 tool 消息的长度要调整
+                    print(f"[Sanitizer] 删除无内容的 tool_calls assistant 及后续孤立的 tool 消息。缺失 id: {missing_ids}")
+                    # 因为 i 已经被删除，指针不能前进，继续从当前位置检查
+                    continue
+            else:
+                # 所有 tool_call_id 都找到了，正常
+                # 跳过这些 tool 消息，继续检查后面的
+                i = j  # 跳到 tool 消息之后
+                continue
+        
+        elif role == "tool":
+            # 检查这条 tool 消息前面是否有对应的 assistant tool_calls
+            # 向前找最近的一个 assistant
+            k = i - 1
+            found = False
+            while k >= 0:
+                if msgs[k].get("role") == "assistant" and msgs[k].get("tool_calls"):
+                    tids = {tc["id"] for tc in msgs[k]["tool_calls"]}
+                    if msg.get("tool_call_id") in tids:
+                        found = True
+                    break
+                k -= 1
+            if not found:
+                # 孤立的 tool 消息，删除
+                del msgs[i]
+                print(f"[Sanitizer] 删除孤立的 tool 消息: {msg.get('tool_call_id')}")
+                continue
+        
+        i += 1
+
+    return msgs
+
 async def generate_stream_response(client, reasoner_client, request: ChatRequest, settings: dict, 
                                    fastapi_base_url, enable_thinking, enable_deep_research, 
                                    enable_web_search, async_tools_id):
@@ -4004,7 +4095,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
             
 
                 print(tools)
-
+                request.messages = sanitize_tool_calls(request.messages)
                 if settings['tools']['deepsearch']['enabled'] or enable_deep_research: 
                     deepsearch_messages = copy.deepcopy(request.messages)
                     content_append(deepsearch_messages, 'user',  "\n\n将用户提出的问题或给出的当前任务拆分成多个步骤，每一个步骤用一句简短的话概括即可，无需回答或执行这些内容，直接返回总结即可，但不能省略问题或任务的细节。如果用户输入的只是闲聊或者不包含任务和问题，直接把用户输入重复输出一遍即可。如果是非常简单的问题，也可以只给出一个步骤即可。一般情况下都是需要拆分成多个步骤的。")
