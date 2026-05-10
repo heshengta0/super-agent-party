@@ -1703,4 +1703,5 @@ key3`,
         "pathChangeNotice": "提示：如果您希望保留原有数据，请在重启前手动将原文件夹内的文件复制到新路径中。",
         'EnableTextInput': '启用输入框',
         'DisableTextInput': '禁用输入框',
+        'browserVision': '启用浏览器视觉（浏览器截图将直接发给AI）',
     }

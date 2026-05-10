@@ -479,7 +479,9 @@ let vue_data = {
       enabled: false,
       mcpName: 'browser-mcp', // browser-mcp or playwright-mcp
       type:"external", // external or internal
-      CDPport:9222
+      CDPport:9222,
+      browserVision: false,
+      onlyNewScreen: true,
     },
     sqlSettings:{
       enabled: false,

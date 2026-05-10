@@ -4915,9 +4915,53 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
 
                         # 在推理结束后添加完整推理内容到消息
                         content_append(request.messages, 'user', f"\n\n可参考的推理过程：{full_reasoning}") # 可参考的推理过程
-                    
+
+                    all_combined_results = ""
+                    if tool_calls:
+                        # 统计非 None 的 tool_calls 数量
+                        tool_msg_count = sum(1 for tc in tool_calls if tc is not None)
+                        if tool_msg_count > 0:
+                            # 提取 request.messages 最后新加进去的工具返回结果，并将它们拼接在一起
+                            recent_tool_msgs = request.messages[-tool_msg_count:]
+                            all_combined_results = "\n".join([str(msg.get("content", "")) for msg in recent_tool_msgs if msg.get("role") == "tool"])
+
+                    browser_vision_enabled = False
+                    if settings['chromeMCPSettings']['enabled'] and settings['chromeMCPSettings']['type']=='internal':
+                        browser_vision_enabled = settings['chromeMCPSettings'].get('browserVision', False)
+
+                    if browser_vision_enabled and '[Getting browser screenshot]' in all_combined_results:
+                        import re
+                        # 使用正则提取返回值中的 URL (例如: http://127.0.0.1:3456/uploaded_files/xxx.jpg)
+                        match = re.search(r'\[Getting browser screenshot\]\s*(http[^\s]+)', all_combined_results)
+                        if match:
+                            browser_img_url = match.group(1)
+                            
+                            current_browser_msg = {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "[Getting browser screenshot]\n\n【system info】Current browser screenshot injected."},
+                                    {"type": "image_url", "image_url": {"url": browser_img_url}}
+                                ]
+                            }
+                            request.messages.append(current_browser_msg)
+                            
+                            # (可选) 清理旧的浏览器截图，节约 Token 消耗
+                            if settings.get('chromeMCPSettings', {}).get('onlyNewScreen', True):
+                                for msg in request.messages[:-1]:
+                                    if isinstance(msg.get('content'), list):
+                                        # 过滤掉旧的图片项
+                                        msg['content'] =[item for item in msg['content'] if item.get('type') != 'image_url']
+                                        # 如果过滤后只剩下 text，直接还原为普通字符串
+                                        if len(msg['content']) == 1 and msg['content'][0].get('type') == 'text':
+                                            msg['content'] = msg['content'][0]['text']
+                                        elif len(msg['content']) == 0:
+                                            msg['content'] = ""
+
+
                     vision_control_enabled = settings.get('visionControlSettings', {}).get('enabled', False)
-                    if vision_control_enabled and (results =='[Getting screenshot]' or settings.get('visionControlSettings', {}).get('desktopVision', False)):
+                    
+                    # === 修改点：将原来绝对匹配 results 修改为判断包含在 all_combined_results 中 ===
+                    if vision_control_enabled and ('[Getting screenshot]' in all_combined_results or settings.get('visionControlSettings', {}).get('desktopVision', False)):
                         try:
                             import pyautogui
                             # 必须从你的工具类中引入设置区域的方法
@@ -4927,7 +4971,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                             is_grid_enabled = v_settings.get('isEnableGrid', False)
                             is_full_screen = v_settings.get('isFullScreen', True)
                             # ScreenSize 格式为 [x, y, width, height]
-                            screen_size = v_settings.get('ScreenSize', [0, 0, 1920, 1080])
+                            screen_size = v_settings.get('ScreenSize',[0, 0, 1920, 1080])
                             time.sleep(0.5) # 等待一下，确保截图工具已经准备好
                             print(f"正在执行桌面截图 (全屏: {is_full_screen}, 网格: {is_grid_enabled})...")
                             
@@ -4963,8 +5007,10 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
 
                             # --- 3. 绘制视觉反馈 (红点/线) ---
                             action_feedback_hint = ""
-                            if results and "[LAST_ACTION:" in str(results):
-                                screenshot = await asyncio.to_thread(draw_action_feedback, screenshot, str(results))
+                            
+                            # === 修改点：使用 all_combined_results 替代原来的 results ===
+                            if all_combined_results and "[LAST_ACTION:" in all_combined_results:
+                                screenshot = await asyncio.to_thread(draw_action_feedback, screenshot, all_combined_results)
                                 action_feedback_hint = (
                                     " Notice: The colored markers show your PREVIOUS actions relative to this view. "
                                     "Cyan = Click. Blue = Double Click. Green-Yellow = Drag."

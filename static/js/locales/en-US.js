@@ -1700,4 +1700,5 @@ Key3`,
         "pathChangeNotice": "Notice: If you wish to retain existing data, manually copy files from the original folder to the new path before restarting.",
         'EnableTextInput': 'Enable Text Input',
         'DisableTextInput': 'Disable Text Input',
+        'browserVision': 'Enable browser vision (browser screenshots will be sent directly to AI)',
     }

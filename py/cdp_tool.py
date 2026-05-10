@@ -299,7 +299,7 @@ async def take_screenshot(fullPage=False, uid=None):
     if not result or result.startswith("Error") or result.startswith("Screenshot Error"):
         return f"Failed to capture screenshot: {result}"
         
-    return f"Screenshot saved to {result}"
+    return f"[Getting browser screenshot] {result}"
 
 # ==========================================
 # Tool Definitions (JSON Schemas)

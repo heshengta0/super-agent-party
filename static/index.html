@@ -9136,6 +9136,18 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <el-option :label="t('playwright-mcp')" value="playwright-mcp" ></el-option>
                         </el-select>
                       </el-form-item>
+                      <el-form-item :label="t('browserVision')" class="form-item-align" label-position="left"  v-if="chromeMCPSettings.type=='internal'">
+                        <el-switch 
+                          v-model="chromeMCPSettings.browserVision" 
+                          @change="autoSaveSettings"
+                        ></el-switch>
+                      </el-form-item>
+                      <el-form-item :label="t('onlyNewScreen')" class="form-item-align" label-position="left"  v-if="chromeMCPSettings.type=='internal' &&  chromeMCPSettings.browserVision">
+                        <el-switch 
+                          v-model="chromeMCPSettings.onlyNewScreen" 
+                          @change="autoSaveSettings"
+                        ></el-switch>
+                      </el-form-item>
                       <el-alert type="info" :closable="false" class="mb-2" v-if="chromeMCPSettings.type=='external' && chromeMCPSettings.mcpName=='playwright-mcp'">
                         <div class="alert-content">
                           {{ t('browserNotice5') }}

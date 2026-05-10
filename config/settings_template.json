@@ -246,7 +246,9 @@
       "enabled": false,
       "mcpName": "browser-mcp",
       "type":"external",
-      "CDPport":9222
+      "CDPport":9222,
+      "browserVision": false,
+      "onlyNewScreen": true
     },
     "sqlSettings":{
       "enabled": false,

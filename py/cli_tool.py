@@ -68,13 +68,34 @@ get_shell_environment()
 
 # ==================== 核心基础设施：流处理 ====================
 
+
 async def read_stream(stream, *, is_error: bool = False):
-    """读取流并添加错误前缀"""
+    """
+    改进的流读取器：支持多编码回退，确保能抓取到系统原始报错。
+    """
     if stream is None:
         return
-    async for line in stream:
-        prefix = "[ERROR] " if is_error else ""
-        yield f"{prefix}{line.decode('utf-8', errors='replace').rstrip()}"
+    
+    prefix = "[ERROR] " if is_error else ""
+    
+    while True:
+        line_bytes = await stream.readline()
+        if not line_bytes:
+            break
+            
+        decoded = ""
+        # 依次尝试：UTF-8 -> GBK (Windows) -> CP437 -> 替换模式
+        for enc in ['utf-8', 'gbk', 'cp437']:
+            try:
+                decoded = line_bytes.decode(enc).rstrip()
+                break
+            except UnicodeDecodeError:
+                continue
+        
+        if not decoded:
+            decoded = line_bytes.decode('utf-8', errors='replace').rstrip()
+            
+        yield f"{prefix}{decoded}"
 
 # 修改 read_stream 为分块读取，防止进度条挂起
 async def read_stream_chunks(stream, prefix=""):
@@ -137,7 +158,7 @@ def get_detailed_exit_info(code: int, command: str) -> str:
     
     # 基础映射
     explanations = {
-        1: "常规错误 (权限不足、语法错误或逻辑失败)。",
+        1: "提示: 退出码 1 表示命令执行失败，请仔细阅读上方输出中的错误信息（如 Error、Fatal、error 关键字）以确定具体原因。",
         2: "Shell 内置命令使用不当。",
         126: "命令不可执行 (权限不足或不是可执行文件)。",
         127: "找不到命令 (Linux/Unix)。",
@@ -162,33 +183,6 @@ def get_detailed_exit_info(code: int, command: str) -> str:
             
     return info
 
-async def read_stream(stream, *, is_error: bool = False):
-    """
-    改进的流读取器：支持多编码回退，确保能抓取到系统原始报错。
-    """
-    if stream is None:
-        return
-    
-    prefix = "[ERROR] " if is_error else ""
-    
-    while True:
-        line_bytes = await stream.readline()
-        if not line_bytes:
-            break
-            
-        decoded = ""
-        # 依次尝试：UTF-8 -> GBK (Windows) -> CP437 -> 替换模式
-        for enc in ['utf-8', 'gbk', 'cp437']:
-            try:
-                decoded = line_bytes.decode(enc).rstrip()
-                break
-            except UnicodeDecodeError:
-                continue
-        
-        if not decoded:
-            decoded = line_bytes.decode('utf-8', errors='replace').rstrip()
-            
-        yield f"{prefix}{decoded}"
 
 # ==================== [新增] 核心基础设施：进程管理 ====================
 
@@ -1129,25 +1123,6 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
                 return False, f"{reason} blocked in {mode} mode"
     
     return True, command
-
-# ===== 修复乱码：增加 GBK 解码支持 =====
-async def read_stream(stream, *, is_error: bool = False):
-    """读取流并添加错误前缀，支持 Windows 中文编码"""
-    if stream is None:
-        return
-    async for line in stream:
-        prefix = "[ERROR] " if is_error else ""
-        
-        # Windows 中文系统通常用 GBK，先尝试 UTF-8，失败则尝试 GBK
-        try:
-            decoded = line.decode('utf-8').rstrip()
-        except UnicodeDecodeError:
-            try:
-                decoded = line.decode('gbk').rstrip()
-            except:
-                decoded = line.decode('utf-8', errors='replace').rstrip()
-                
-        yield f"{prefix}{decoded}"
 
 
 async def shell_tool_local(command: str, background: bool = False, timeout: int = 600) -> AsyncIterator[str]:
