@@ -12650,15 +12650,16 @@ isTargetPlatform(behavior, platformKey) {
   生成的角色卡内容必须与用户输入的语言保持一致。 比如，用户输入的是中文，那么角色卡内容也必须是中文。如果用户输入的是英文，那么角色卡内容也必须是英文。以此类推！
   用户会提供一个简短的创意，你必须仅回复一段**有效的 JSON**，并放在一个标准的Markdown 代码块中。  
   JSON的值必须用双引号括起来，而值内部的内容如果需要引号，一律改成单引号。
+  mesExample包含5-10轮示例，alternateGreetings包含5-10条开场白，characterBook包含10条以上的关键词和内容。
   JSON 结构必须为：
 
     {
       "name": "角色名称",
       "description": "简要背景/世界观设定，尽可能详细",
       "personality": "性格特征",
-      "mesExample": "展示 2~5 轮聊天示例，格式：用户:xxx\n角色:xxx",
+      "mesExample": "展示 5-10 轮聊天示例，对话示例中禁止出现非对话表达（不要出现心理描写、动作描写等等，只要纯说话的部分），格式：用户:xxx\n角色:xxx",
       "systemPrompt": "用于驱动角色的系统提示",
-      "firstMes": "角色的第一句问候语",
+      "firstMes": "角色的第一句问候语，问候语禁止出现非对话表达（不要出现心理描写、动作描写等等，只要纯说话的部分）",
       "alternateGreetings": ["可选问候2","可选问候3"],
       "characterBook": [
           {"keysRaw":"关键词1\n关键词2","content":"这里填入当用户提到关键词1或关键词2时，需要返回给AI看的内容……"},
