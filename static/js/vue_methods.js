@@ -2713,7 +2713,7 @@ let vue_methods = {
             // 初始化流式文本批量更新状态
             this._streamTargetMsg = currentMsg;
             this._streamTextBuffer = '';
-
+            this.first_token = true;
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -2731,7 +2731,8 @@ let vue_methods = {
                         const delta = parsed.choices?.[0]?.delta;
                         if (!delta) continue;
 
-                        if (currentMsg.content === '' && !isResume) {
+                        if (this.first_token && !isResume) {
+                            this.first_token = false;
                             this.stopTimer();
                             currentMsg.first_token_latency = this.elapsedTime;
                         }
