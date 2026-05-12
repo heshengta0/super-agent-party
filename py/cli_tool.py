@@ -832,8 +832,11 @@ async def list_files_tool(path: str = ".", show_all: bool = True) -> str:
         return await _exec_docker_cmd_simple(real_cwd, ["ls", flag, path])
     except Exception as e: return str(e)
 
-async def read_file_tool(path: str) -> str:
-    """[Docker] 读取文件：增加大小限制、行宽截断及结构化提示"""
+async def read_file_tool(path: str, start_line: int = None, end_line: int = None) -> str:
+    """[Docker] 读取文件：如果传入 start_line/end_line，自动委托给 read_file_range_tool"""
+    if start_line is not None or end_line is not None:
+        # 若模型误传范围参数，直接转入范围读取逻辑
+        return await read_file_range_tool(path, start_line or 1, end_line or 1)
     try:
         real_cwd = await _get_current_cwd()
         
@@ -1271,8 +1274,9 @@ def _format_line(line_number: int, content: str, max_line_chars: int = 1000) -> 
         content = f"{content[:half]} ... [Truncated {len(content)-max_line_chars} chars] ... {content[-50:]}"
     return f"{line_number:5} | {content}"
 
-async def read_file_tool_local(path: str) -> str:
-    """[Local] 读取文件：支持大文件截断及长行截断"""
+async def read_file_tool_local(path: str, start_line: int = None, end_line: int = None) -> str:
+    if start_line is not None or end_line is not None:
+        return await read_file_range_tool_local(path, start_line or 1, end_line or 1)
     try:
         MAX_LINES = 1000
         MAX_LINE_CHARS = 1000
@@ -2043,7 +2047,7 @@ TOOLS_REGISTRY = {
                     "old_string": {"type": "string"}, 
                     "new_string": {"type": "string"}
                 }, 
-                "required": ["path", "old_string"]
+                "required": ["path", "old_string", "new_string"]
             }
         }
     },
@@ -2210,8 +2214,8 @@ LOCAL_TOOLS_REGISTRY = {
                 "type": "object", 
                 "properties": {
                     "path": {"type": "string", "description": "Relative path to file"},
-                    "start_line": {"type": "integer"},
-                    "end_line": {"type": "integer"}
+                    "start_line": {"type": "integer", "description": "The line number to start reading from."},
+                    "end_line": {"type": "integer", "description": "The line number to stop reading at."}
                 }, 
                 "required": ["path", "start_line", "end_line"]
             }
@@ -2238,10 +2242,9 @@ LOCAL_TOOLS_REGISTRY = {
             "parameters": {
                 "type": "object", 
                 "properties": {
-                    "pattern": {"type": "string"}
-                    # 注意：根据之前的代码实现，search_files_local 似乎没有 path 参数，而是直接在 CWD 搜索。
-                    # 如果需要支持指定路径，需要在实现代码中确认。
-                }, 
+                    "pattern": {"type": "string"},
+                    "path": {"type": "string", "description": "Relative directory to search in (default .)"}
+                },
                 "required": ["pattern"]
             }
         }
@@ -2256,7 +2259,8 @@ LOCAL_TOOLS_REGISTRY = {
                     "pattern": {
                         "type": "string",
                         "description": "Glob pattern (relative to current working directory)."
-                    }
+                    },
+                    "exclude": {"type": "string", "description": "Comma-separated patterns to exclude"}
                 }, 
                 "required": ["pattern"]
             }
@@ -2269,7 +2273,7 @@ LOCAL_TOOLS_REGISTRY = {
             "parameters": {
                 "type": "object", 
                 "properties": {
-                    "skill_id": {"type": "string"}
+                    "skill_id": {"type": "string", "description": "The ID of the skill to read."}
                 }, 
                 "required": ["skill_id"]
             }
@@ -2287,9 +2291,9 @@ LOCAL_TOOLS_REGISTRY = {
                         "type": "string",
                         "description": "Relative path to file (from current working directory)."
                     }, 
-                    "content": {"type": "string"}
+                    "content": {"type": "string", "description": "Full file content"}
                 }, 
-                "required": ["path"]
+                "required": ["path", "content"]
             }
         }
     },
@@ -2304,10 +2308,10 @@ LOCAL_TOOLS_REGISTRY = {
                         "type": "string",
                         "description": "Relative path to file (from current working directory)."
                     }, 
-                    "old_string": {"type": "string"}, 
-                    "new_string": {"type": "string"}
+                    "old_string": {"type": "string", "description": "The string to be replaced."}, 
+                    "new_string": {"type": "string", "description": "The replacement string."}
                 }, 
-                "required": ["path", "old_string"]
+                "required": ["path", "old_string", "new_string"]
             }
         }
     },
