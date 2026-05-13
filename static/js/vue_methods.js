@@ -3082,8 +3082,6 @@ let vue_methods = {
                 });
             }
 
-            this.saveConversations();
-
             if (this.ttsSettings.enabled && audioProcess) {
                 await audioProcess;
             }
