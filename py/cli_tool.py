@@ -28,6 +28,12 @@ COMMAND_TIMEOUT = 300  # 5分钟超时
 
 # ==================== 环境初始化 ====================
 
+try:
+    from zerobox import Sandbox, SandboxCommandError
+    HAS_ZEROBOX = True
+except ImportError:
+    HAS_ZEROBOX = False
+
 def get_shell_environment():
     """通过子进程获取完整的 shell 环境"""
     shell = os.environ.get('SHELL', '/bin/zsh')
@@ -1315,7 +1321,9 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
 
 async def shell_tool_local(command: str, background: bool = False, timeout: int = 600) -> AsyncIterator[str]:
     """
-    [Local] 执行本地命令（支持动态超时）
+    [Local] 执行本地命令
+    - Windows: 维持原有的 powershell/cmd 逻辑。
+    - 非 Windows: 优先使用 zerobox.Sandbox 提供 OS 级沙盒隔离。
     """
     # 限制超时范围：1秒到1小时
     effective_timeout = max(1, min(timeout, 3600))
@@ -1325,26 +1333,72 @@ async def shell_tool_local(command: str, background: bool = False, timeout: int 
     perm = settings.get("localEnvSettings", {}).get("permissionMode", "default")
     
     if not cwd: 
-        yield "Error: No workspace directory specified."
+        yield "Error: No workspace directory specified (cc_path)."
         return
     
-    allowed, result = validate_bash_command(command, cwd, mode=perm)
+    # 安全校验策略（双重防护）
+    allowed, validate_result = validate_bash_command(command, cwd, mode=perm)
     if not allowed:
-        yield f"[Security] Command blocked: {result}"
+        yield f"[Security] Command blocked: {validate_result}"
         return
     
     system = platform.system()
+
+    # ==================== 非 Windows 且安装了 ZeroBox 的情况 ====================
+    # 注意：SDK 目前是同步阻塞设计。为了保持 CLI 响应，我们在线程中运行它。
+    # 且为了 PID 管理器的兼容性，仅在前台任务（background=False）时使用 SDK。
+    if system != "Windows" and HAS_ZEROBOX and not background:
+        try:
+            yield f"--- [Sandbox Mode] Executing via zerobox.Sandbox ---\n"
+            
+            def run_sandbox():
+                # 创建沙盒实例：允许读写当前工作目录，开启所有权限以兼容复杂命令
+                # 如果需要更严格，可以将 allow_all=True 改为 allow_write=[cwd]
+                sb = Sandbox.create({
+                    "cwd": cwd,
+                    "allow_write": [cwd],  
+                    "allow_read": [cwd],  
+                    "allow_net": True,
+                })
+                # 使用 .output() 获取 code, stdout, stderr 且不抛出执行异常
+                return sb.sh(command).output(timeout=float(effective_timeout))
+
+            # 在线程池中执行同步的 SDK 调用
+            result = await asyncio.to_thread(run_sandbox)
+            
+            if result.stdout:
+                yield result.stdout
+            if result.stderr:
+                yield f"[stderr] {result.stderr}"
+            
+            if result.code != 0:
+                yield f"\n--- 运行结束 (Exit Code: {result.code}) ---"
+                yield get_detailed_exit_info(result.code, command)
+            
+            return # 任务结束
+
+        except subprocess.TimeoutExpired:
+            yield f"\n\n[TIMEOUT ERROR] 命令执行超过 {effective_timeout} 秒已强制终止。"
+            return
+        except Exception as e:
+            yield f"[Sandbox Error] ZeroBox SDK 运行异常: {str(e)}\n尝试回退到标准 Shell...\n"
+            # 报错后不返回，继续尝试下方的标准执行逻辑
+
+    # ==================== Windows 或 回退到标准 Shell 的情况 ====================
+    
     if system == "Windows":
         def is_strictly_cmd(cmd_str: str) -> bool:
             c = cmd_str.lower().strip()
             if re.search(r'%[a-z0-9_]+%', c): return True
             if '&&' in c and '$' not in c: return True
             return False
+            
         if is_strictly_cmd(command):
             exe, args = "cmd.exe", ["/c", command]
         else:
             exe, args = "powershell.exe", ["-NonInteractive", "-NoProfile", "-Command", command]
     else:
+        # 非 Windows 环境回退或后台任务
         exe, args = os.environ.get('SHELL', '/bin/bash'), ["-c", command]
 
     env = os.environ.copy()
@@ -1357,7 +1411,7 @@ async def shell_tool_local(command: str, background: bool = False, timeout: int 
             stdout=asyncio.subprocess.PIPE, 
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
-            env=env, # 使用修改后的 env
+            env=env,
             start_new_session=(system != "Windows")
         )
 
@@ -1380,7 +1434,6 @@ async def shell_tool_local(command: str, background: bool = False, timeout: int 
         start_time = time.time()
         try:
             while not (stdout_task.done() and stderr_task.done() and queue.empty()):
-                # 使用传入的 effective_timeout
                 remaining = effective_timeout - (time.time() - start_time)
                 if remaining <= 0:
                     raise asyncio.TimeoutError()
@@ -1394,18 +1447,21 @@ async def shell_tool_local(command: str, background: bool = False, timeout: int 
             if process.returncode != 0:
                 yield f"\n--- 运行结束 (Exit Code: {process.returncode}) ---"
                 yield get_detailed_exit_info(process.returncode, command)
+                
         except asyncio.TimeoutError:
-            # 杀进程树逻辑保持不变...
+            # 杀进程树逻辑
             if system == "Windows":
                 subprocess.run(f"taskkill /F /T /PID {process.pid}", shell=True, capture_output=True)
             else:
-                try: os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                except: process.kill()
-            yield f"\n\n[TIMEOUT ERROR] 命令执行超过 {effective_timeout} 秒已强制终止。注意！命令并未完全执行完毕。"
-            yield "\n💡 提示：对于启动应用或大文件下载，请使用 'background': true。"
-    except Exception as e: 
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                except:
+                    process.kill()
+            yield f"\n\n[TIMEOUT ERROR] 命令执行超过 {effective_timeout} 秒已强制终止。"
+            yield "\n💡 提示：对于长期运行的任务，请使用 'background': true。"
+            
+    except Exception as e:
         yield f"[系统错误] 无法启动进程: {str(e)}"
-
 
 # 恢复原有的 Local 文件工具
 async def list_files_tool_local(path: str = ".", show_all: bool = True) -> str:

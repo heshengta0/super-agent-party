@@ -17,6 +17,22 @@ universal_disable_sign = {
     'exclude_binaries': True
 }
 
+my_hidden_imports = [
+    'pydantic.deprecated.decorator',
+    'tiktoken_ext',
+    'tiktoken_ext.openai_public',
+    'botpy',
+    'imageio_ffmpeg', 
+    *collect_submodules('mem0'),
+]
+
+if platform.system() != 'Windows':
+    # 添加 zerobox 及其所有子模块
+    my_hidden_imports.extend(collect_submodules('zerobox'))
+    # 收集 zerobox 可能带有的数据文件（如配置文件等）
+    my_extra_datas.extend(collect_data_files('zerobox'))
+
+
 a = Analysis(
     ['server.py'],
     pathex=[],
@@ -30,14 +46,7 @@ a = Analysis(
         ('skills', 'skills'),
         *ffmpeg_data, 
     ],
-    hiddenimports=[
-        'pydantic.deprecated.decorator',
-        'tiktoken_ext',
-        'tiktoken_ext.openai_public',
-        'botpy',
-        'imageio_ffmpeg', 
-        *collect_submodules('mem0'),
-    ],
+    hiddenimports=my_hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
