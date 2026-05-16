@@ -434,10 +434,58 @@ scene.add(currentVrmWrapper);              // 新增：一开始就加入场景
 const loader = new GLTFLoader();
 loader.crossOrigin = 'anonymous';
 
+// ---------------- 新增：解决部分模型 SpringBone 配置不规范导致的解析崩溃 ----------------
+loader.register((parser) => {
+    return {
+        name: 'VRMSpringBoneBugFixPlugin',
+        beforeRoot: () => {
+            const json = parser.json;
+            if (!json || !json.extensions) return;
+
+            // 修复 VRM 1.0 SpringBone
+            if (json.extensions.VRMC_springBone) {
+                const sb = json.extensions.VRMC_springBone;
+                if (!sb.springs) sb.springs = [];
+                if (!sb.colliders) sb.colliders = [];
+                if (!sb.colliderGroups) sb.colliderGroups = [];
+                
+                sb.springs.forEach(spring => {
+                    if (spring) {
+                        if (!spring.joints) spring.joints = [];
+                        if (!spring.colliderGroups) spring.colliderGroups = [];
+                    }
+                });
+                
+                sb.colliderGroups.forEach(group => {
+                    if (group && !group.colliders) group.colliders = [];
+                });
+            }
+
+            // 修复 VRM 0.0 动骨 (SecondaryAnimation)
+            if (json.extensions.VRM && json.extensions.VRM.secondaryAnimation) {
+                const sa = json.extensions.VRM.secondaryAnimation;
+                if (!sa.boneGroups) sa.boneGroups = [];
+                if (!sa.colliderGroups) sa.colliderGroups = [];
+                
+                sa.boneGroups.forEach(group => {
+                    if (group) {
+                        if (!group.bones) group.bones = [];
+                        if (!group.colliderGroups) group.colliderGroups = [];
+                    }
+                });
+                
+                sa.colliderGroups.forEach(group => {
+                    if (group && !group.colliders) group.colliders = [];
+                });
+            }
+        }
+    };
+});
+// -----------------------------------------------------------------------------------------
+
 loader.register( ( parser ) => {
 
     return new VRMLoaderPlugin(parser); 
-
 
 } );
 
