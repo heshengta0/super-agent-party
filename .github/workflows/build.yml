@@ -286,9 +286,11 @@ jobs:
 
       - name: Install Python dependencies (x86_64)
         run: |
+          # 直接使用 x86_64 Python 的 pip 和 uv，不创建 venv
           arch -x86_64 python3-x64 -m pip install --upgrade pip
           arch -x86_64 python3-x64 -m pip install uv
-          arch -x86_64 python3-x64 -m venv venv_x64
+          # 用 uv 创建 x86_64 虚拟环境（uv 会自动处理架构）
+          arch -x86_64 python3-x64 -m uv venv venv_x64 --python python3-x64
           source venv_x64/bin/activate
           uv sync
 
