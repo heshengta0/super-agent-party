@@ -4,9 +4,11 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 from imageio_ffmpeg import get_ffmpeg_exe                                
 
 _ = get_ffmpeg_exe()
+# ---------- 1. 收集 imageio-ffmpeg 的 binaries & datas ----------
 ffmpeg_bin = [(get_ffmpeg_exe(), '.')]                                  
 ffmpeg_data = collect_data_files('imageio_ffmpeg')     
 
+# 全平台禁用签名配置
 universal_disable_sign = {
     'codesign_identity': None,
     'entitlements_file': None,
@@ -26,8 +28,11 @@ my_hidden_imports = [
 my_extra_datas = []
 
 if platform.system() != 'Windows':
+    # 添加 zerobox 及其所有子模块
     my_hidden_imports.extend(collect_submodules('zerobox'))
+    # 收集 zerobox 可能带有的数据文件（如配置文件等）
     my_extra_datas.extend(collect_data_files('zerobox'))
+
 
 a = Analysis(
     ['server.py'],
@@ -54,6 +59,7 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# 修改基础配置
 base_exe_config = {
     'debug': False,
     'strip': False,
@@ -64,6 +70,7 @@ base_exe_config = {
 }
 
 if platform.system() == 'Darwin':
+    # macOS 配置：生成独立可执行文件
     exe = EXE(
         pyz,
         a.scripts,
@@ -81,12 +88,13 @@ if platform.system() == 'Darwin':
         **universal_disable_sign
     )
 elif platform.system() == 'Windows':
+    # Windows 特殊配置
     exe = EXE(
         pyz,
         a.scripts,
         [],
         name='server',
-        icon='static/source/icon.ico',
+        icon='static/source/icon.ico',  # 使用 .ico 格式图标
         **base_exe_config
     )
     coll = COLLECT(
@@ -98,6 +106,7 @@ elif platform.system() == 'Windows':
         **universal_disable_sign
     )
 else:
+    # Linux 配置
     exe = EXE(
         pyz,
         a.scripts,

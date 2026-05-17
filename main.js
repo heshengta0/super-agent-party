@@ -666,25 +666,7 @@ ipcMain.handle('show-item-in-folder', (event, filePath) => {
 });
 
 // 配置自动更新
-// 配置自动更新
 function setupAutoUpdater() {
-  // ★★★ 新增：根据系统架构设置不同的更新配置文件 ★★★
-  if (process.platform === 'darwin') {
-    const archName = os.arch() === 'arm64' ? 'arm64' : 'x64';
-    const ymlName = `latest-mac-${archName}.yml`;
-    console.log(`[AutoUpdater] macOS ${archName} 架构，使用配置文件: ${ymlName}`);
-    
-    // 动态设置 feed URL
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'heshengtao',
-      repo: 'super-agent-party',
-      releaseType: 'draft',
-      // 指定架构对应的 yml 文件
-      url: `https://github.com/heshengtao/super-agent-party/releases/latest/download/${ymlName}`
-    });
-  }
-
   autoUpdater.autoDownload = false; // 先禁用自动下载
   if (isDev) {
     autoUpdater.on('error', (err) => {

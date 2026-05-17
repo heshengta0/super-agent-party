@@ -15,8 +15,7 @@ on:
           - windows-x64
           - linux-x64
           - linux-arm64
-          - macos-arm64
-          - macos-x64
+          - macos
       version:
         description: '版本号（例如：0.5.0，不要带 v 前缀）'
         required: false
@@ -225,9 +224,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-  # ────────── macOS 双架构 ──────────
+  # ────────── macOS Universal ──────────
   build-macos:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos-arm64' || inputs.platform == 'macos-x64'))
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
     runs-on: macos-latest
     permissions:
       contents: write
@@ -268,12 +267,14 @@ jobs:
       - name: Install Node.js dependencies
         run: npm install
 
+      # 构建 arm64 后端
       - name: Build Python backend (arm64)
         run: |
           uv add pyinstaller
           uv run pyinstaller server.spec
           mv dist/server dist/server_arm64
 
+      # 通过 Rosetta 构建 x86_64 后端
       - name: Setup x86_64 Python via Rosetta
         run: |
           curl -L https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.12.7+20241002-x86_64-apple-darwin-install_only.tar.gz -o python-x64.tar.gz
@@ -297,7 +298,19 @@ jobs:
           uv run pyinstaller server.spec
           mv dist/server dist/server_x64
 
-      - name: Build and Publish Electron app (macOS)
+      # ★ 合并为 Universal Binary
+      - name: Create Universal Python backend
+        run: |
+          mkdir -p dist/server
+          # 用 lipo 合并 arm64 和 x86_64 的 server 可执行文件
+          lipo -create dist/server_arm64/server dist/server_x64/server -output dist/server/server
+          chmod +x dist/server/server
+          # 复制其他文件（从 arm64 版本复制，内容都一样的）
+          cp -r dist/server_arm64/* dist/server/ 2>/dev/null || true
+          # 确保可执行文件不被覆盖
+          rm -rf dist/server/server_old 2>/dev/null || true
+
+      - name: Build and Publish Electron app (macOS Universal)
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -309,36 +322,7 @@ jobs:
           else
             PUBLISH_FLAG="--publish always"
           fi
-
-          BUILD_ARM=false
-          BUILD_X64=false
-          if [[ "${{ inputs.platform }}" == "macos-arm64" || "${{ inputs.platform }}" == "all" ]]; then
-            BUILD_ARM=true
-          fi
-          if [[ "${{ inputs.platform }}" == "macos-x64" || "${{ inputs.platform }}" == "all" ]]; then
-            BUILD_X64=true
-          fi
-
-          if [ "$BUILD_ARM" = true ]; then
-            ln -sf dist/server_arm64 dist/server
-            npx electron-builder build --mac --arm64 $PUBLISH_FLAG
-            if [ -f "release/latest-mac.yml" ]; then
-              mv release/latest-mac.yml release/latest-mac-arm64.yml
-            fi
-          fi
-
-          if [ "$BUILD_X64" = true ]; then
-            rm -f dist/server
-            ln -sf dist/server_x64 dist/server
-            npx electron-builder build --mac --x64 $PUBLISH_FLAG
-            if [ -f "release/latest-mac.yml" ]; then
-              mv release/latest-mac.yml release/latest-mac-x64.yml
-            fi
-          fi
-
-          if [ "$BUILD_ARM" = true ] && [ "$BUILD_X64" = false ]; then
-            mv release/latest-mac-arm64.yml release/latest-mac.yml
-          fi
+          npx electron-builder build --mac --universal $PUBLISH_FLAG
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
