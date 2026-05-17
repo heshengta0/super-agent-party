@@ -286,19 +286,23 @@ jobs:
 
       - name: Install Python dependencies (x86_64)
         run: |
-          # 先给 x86_64 Python 装好 pip/uv（在系统级，不进入 venv）
+          # 1. 给 x86_64 Python 安装 pip / uv（系统级）
           arch -x86_64 /usr/local/bin/python3-x64 -m pip install --upgrade pip
           arch -x86_64 /usr/local/bin/python3-x64 -m pip install uv
 
-          # 使用系统自带的 venv 创建虚拟环境（确保是纯 x86_64）
+          # 2. 用系统 venv 创建纯 x86_64 虚拟环境
           arch -x86_64 /usr/local/bin/python3-x64 -m venv venv_x64
+
+          # 3. 修复：创建 python3 软链接，确保 uv/shell 能找到
+          ln -sf venv_x64/bin/python3-x64 venv_x64/bin/python3
+
+          # 4. 激活并验证架构
           source venv_x64/bin/activate
+          echo "=== 虚拟环境 Python 架构 ==="
+          python3 -c "import platform; print(platform.machine())"
+          python3 -c "import platform; assert platform.machine() == 'x86_64', '不是 x86_64！'"
 
-          # 强制验证虚拟环境中的 Python 必须是 x86_64
-          echo "=== VENV Python arch ==="
-          python -c "import platform; assert platform.machine() == 'x86_64', 'VENV is not x86_64!'; print('OK')"
-
-          # 在虚拟环境中安装项目依赖（uv sync 会自动使用当前 venv）
+          # 5. 安装项目依赖
           uv sync
 
       - name: Build Python backend (x86_64)
