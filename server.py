@@ -2160,7 +2160,6 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
     cli_settings = settings.get("CLISettings", {})
     cwd = cli_settings.get("cc_path")
     visibilityScope = cli_settings.get("visibilityScope", "workspace")
-    # 修复：local 环境应该从 localEnvSettings 读取权限模式
     engine = cli_settings.get("engine", "")
     
     if engine == "local":
@@ -2172,87 +2171,17 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
     
     permissionMode = env_settings.get("permissionMode", "default")
     
-    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False):
-        
-        # ==================== [新增] 1. 总是注入 MEMORY.md ====================
-        memory_file = Path(cwd) / ".agent" / "MEMORY.md"
-        if memory_file.exists() and memory_file.is_file():
-            try:
-                import aiofiles
-                async with aiofiles.open(memory_file, 'r', encoding='utf-8') as mf:
-                    mem_content = await mf.read()
-                if mem_content.strip():
-                    content_append(request.messages, 'system', f"\n\n**MEMORY.md**:\n{mem_content}\n\n")
-            except Exception as e:
-                print(f"读取 MEMORY.md 失败: {e}")
+    # ==================== 固定能力 & 规则注入（系统消息，不随轮次变化） ====================
+    # 注：原 TTS 用 prepend 会破坏前缀，现改为 append，所有固定规则按频率从低到高（实际均不变）顺序追加
 
-        # ==================== [新增] 2. 处理 Shortcut 快捷指令 ====================
-        if cli_settings.get("shortcut", False):
-            # 获取最新一条用户消息
-            user_text = ""
-            if request.messages and request.messages[-1]['role'] == 'user':
-                user_msg_content = request.messages[-1].get('content', '')
-                if isinstance(user_msg_content, str):
-                    user_text = user_msg_content
-                elif isinstance(user_msg_content, list):
-                    # 兼容图文混合消息
-                    user_text = "".join([item.get('text', '') for item in user_msg_content if item.get('type') == 'text'])
-
-            user_text_trimmed = user_text.strip()
-            
-            if user_text_trimmed:
-                import datetime
-                import re
-                
-                # --- (1) 处理 '#' : 直接保存为记忆 ---
-                if user_text_trimmed.startswith('#'):
-                    mem_content_to_save = user_text_trimmed[1:].strip()
-                    if mem_content_to_save:
-                        try:
-                            agent_dir = Path(cwd) / ".agent"
-                            agent_dir.mkdir(parents=True, exist_ok=True)
-                            
-                            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            append_text = f"\n- [{timestamp}] {mem_content_to_save}"
-                            
-                            import aiofiles
-                            async with aiofiles.open(memory_file, 'a', encoding='utf-8') as mf:
-                                await mf.write(append_text)
-                                
-                            content_append(request.messages, 'system', f"\n\nHint: The user has just saved the following content to the workspace memory using the '#' shortcut command:\n'{mem_content_to_save}'\nPlease briefly confirm in your next reply that you remember this information.\n\n")
-                        except Exception as e:
-                            print(f"保存 MEMORY.md 失败: {e}")
-
-                # --- (2) 处理 '/' : 注入特定技能 ---
-                elif user_text_trimmed.startswith('/'):
-                    parts = user_text_trimmed[1:].split()
-                    if parts:
-                        skill_name = parts[0]
-                        skill_dir = Path(cwd) / ".agent" / "skills" / skill_name
-                        if skill_dir.exists() and skill_dir.is_dir():
-                            doc_file_path = None
-                            # 尝试匹配常见的技能说明文档命名
-                            for name in ["SKILL.md", "skill.md", "SKILLS.md", "skills.md"]:
-                                if (skill_dir / name).exists():
-                                    doc_file_path = skill_dir / name
-                                    break
-                            
-                            if doc_file_path:
-                                try:
-                                    import aiofiles
-                                    async with aiofiles.open(doc_file_path, 'r', encoding='utf-8') as f:
-                                        skill_content = await f.read()
-                                    content_append(request.messages, 'system', f"\n\n🛠️ **The user actively triggered the workspace skill. [{skill_name}]**:\n\n{skill_content}\n\nPlease strictly follow the above skill instructions to handle the user's current request.\n\n")
-                                except Exception as e:
-                                    print(f"读取技能文档失败: {e}")
-
+    # 平台信息（固定）
     if request.is_app_bot and request.platform:
         platform_message = f"\n\n用户正在使用 {request.platform} 软件与你交流\n\n"
         content_append(request.messages, 'system', platform_message)
 
+    # 权限模式提示（固定）
     if cwd and Path(cwd).exists() and cli_settings.get("enabled", False):
         permission_message = ""
-        # 权限模式提示（原有逻辑，但修复了变量名）
         if permissionMode != "plan" and permissionMode != "cowork":
             permission_message = "你当前处于执行模式，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
             content_append(request.messages, 'system', permission_message)
@@ -2270,19 +2199,9 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
             permission_message = "你当前处于计划模式，请尽可能只使用只读工具了解当前项目，使用自然语言描述你的需求和计划，并等待用户确认后再执行！"
             content_append(request.messages, 'system', permission_message)
 
-    if permissionMode == "cowork" and not request.is_sub_agent:
-        if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and engine in ["ds", "local"]:
-            sub_task_context = await query_task_progress(cwd)
-            content_append(request.messages, 'system', sub_task_context)
-    elif cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and engine in ["ds", "local"]:
-        
-        if engine == "local":
-            # 在本地环境下，首先注入系统环境信息
-            system_context = get_system_context()
-            content_append(request.messages, 'system', system_context)
-        elif engine == "ds":
-            # 在 Docker 环境下，注入系统环境信息
-            system_context = """【环境信息】操作系统：Linux | Shell：bash
+    # Docker 环境固定信息（完全静态）
+    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and engine == "ds":
+        system_context = """【环境信息】操作系统：Linux | Shell：bash
 
 ⚠️ 重要提示：
 1. 当前为 Docker 环境，请使用 Linux 命令和工具链
@@ -2355,136 +2274,88 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
    - free / df / du
    
 """
-            content_append(request.messages, 'system', system_context)
+        content_append(request.messages, 'system', system_context)
 
-        todos = []
-        
-        try:
-            todos = await read_todos_local(cwd)
-            
-            # 处理待办事项（原有逻辑）
-            if isinstance(todos, list) and len(todos) > 0:
-                priority_icons = {"high": "🔴", "medium": "🟡", "low": "🟢"}
-                status_icons = {
-                    "pending": "⏳", 
-                    "in_progress": "🔄", 
-                    "done": "✅", 
-                    "cancelled": "❌"
-                }
-                
-                priority_order = {"high": 0, "medium": 1, "low": 2}
-                todos_sorted = sorted(
-                    todos, 
-                    key=lambda x: (
-                        priority_order.get(x.get('priority', 'medium'), 1),
-                        x.get('created_at', '')
-                    )
-                )
-                
-                todo_lines = ["\n\n当你完成一个事项后，请记得使用todo_write_tool更新项目待办事项，所有事项结束后，可以删除本事项文件\n\n📋 **当前项目待办事项**（.agent/ai_todos.json）：\n"]
-                pending_count = 0
-                
-                for todo in todos_sorted:
-                    status = todo.get('status', 'pending')
-                    if status != 'done':
-                        pending_count += 1
-                        icon = status_icons.get(status, "⏳")
-                        priority = priority_icons.get(todo.get('priority', 'medium'), "🟡")
-                        content_text = todo.get('content', '无内容')[:50]
-                        if len(todo.get('content', '')) > 50:
-                            content_text += "..."
-                        
-                        todo_lines.append(f"{icon} {priority} [{todo.get('id', 'unknown')}] {content_text}")
-                
-                if pending_count == 0:
-                    todo_lines.append("✨ 当前没有待办事项，所有任务已完成！")
-                else:
-                    todo_lines.append(f"\n*共有 {pending_count} 个未完成任务*")
-                
-                todo_message = "\n".join(todo_lines)
-                content_append(request.messages, 'system', todo_message)
-                
-        except Exception as e:
-            print(f"[Todo Loader] 跳过待办事项加载: {e}")
-            pass
-
-        try:
-            agents_md = await read_agents_md(cwd)
-            if agents_md:
-                content_append(request.messages, 'system', " **重要事项**（.agent/AGENTS.md）：\n\n"+agents_md+"\n\n")
-        except Exception as e:
-            print(f"[Agent Loader] 跳过AGENTS.md加载: {e}")
-            pass
-
-        try:
-            # 无论是在 docker 还是 local，逻辑路径通常是一致的（通过挂载）
-            # 如果是 Docker 环境且 backend 无法直接访问 cwd，则需通过 docker exec ls 扫描，
-            # 但通常项目路径是共享的。
-            skills_message = await get_project_skills_summary(cwd, visibilityScope)
-            if skills_message:
-                content_append(request.messages, 'system', skills_message)
-        except Exception as e:
-            print(f"[Skill Loader] 扫描技能失败: {e}")
-
+    # 自主行为说明（固定）
     if request.messages[-1]['role'] == 'system' and settings['tools']['autoBehavior']['enabled'] and not request.is_app_bot and not request.is_sub_agent:
         language_message = f"\n\n当你看到被插入到对话之间的系统消息，这是自主行为系统向你发送的消息，例如用户主动或者要求你设置了一些定时任务或者延时任务，当你看到自主行为系统向你发送的消息时，说明这些任务到了需要被执行的节点，例如：用户要你三点或五分钟后提醒开会的事情，然后当你看到一个被插入的“提醒用户开会”的系统消息，你需要立刻提醒用户开会，以此类推\n\n"
         content_append(request.messages, 'system', language_message)
 
-    # 先统一获取当前选中的 memory 对象（后面多处会用到）
-    cur_memory = None
-    if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"]:
-        memoryId = settings["memorySettings"]["selectedMemory"]
-        for memory in settings["memories"]:
-            if memory["id"] == memoryId:
-                cur_memory = memory
-                break
-    
-    # 获取角色名称（用于显示），如果找不到就用 id 兜底
-    selectedMemoryName = cur_memory["name"] if cur_memory else settings["memorySettings"]["selectedMemory"]
+    # 桌面截图提示（固定）
+    if settings['vision']['desktopVision'] and not request.is_app_bot and not request.is_sub_agent:
+        desktop_message = "\n\n用户与你对话时，如果发了图片给你，有可能是给你发当前的桌面截图。\n\n"
+        content_append(request.messages, 'system', desktop_message)
 
-    # 辅助函数：从 memory/{id}/model 格式解析 id，并查找 name
-    def resolve_agent_name(raw_model):
-        if raw_model.startswith("memory/"):
-            # 分解 memory/{id}/rest 格式
-            parts = raw_model.split('/', 2)  # ['memory', 'id', 'rest']
-            if len(parts) >= 2:
-                memory_id = parts[1]
-                # 在 memories 中查找
-                for memory in settings["memories"]:
-                    if memory["id"] == memory_id:
-                        return memory["name"]
-                # 找不到返回原始字符串（兜底）
-                return raw_model
-        # 不是 memory/ 开头的（如普通模型名或用户自定义名），直接返回
-        return raw_model
+    # 推理提示（固定，保留原逻辑 prepend 到用户消息，因其为固定前缀不会破坏缓存）
+    if settings['tools']['inference']['enabled']:
+        inference_message = "回答用户前请先思考推理，再回答问题，你的思考推理的过程必须放在<think>与</think>之间。\n\n"
+        content_prepend(request.messages, 'user', f"{inference_message}\n\n用户：")
 
-    if settings["isGroupMode"] and not request.is_app_bot and not request.is_sub_agent:
-        selectedGroupAgents = settings['selectedGroupAgents']
-        if selectedGroupAgents:
-            userName = "user"
-            if settings["memorySettings"]["userName"]:
-                userName = settings["memorySettings"]["userName"]
-            selectedGroupAgents.append(userName)
-            
-            # 修复：把每个 agent 的 id 转成 name
-            agent_names = [resolve_agent_name(agent) for agent in selectedGroupAgents]
-            
-            group_message = f"\n\n你当前处于群聊模式，群聊中的角色有：{agent_names}\n\n你在扮演{selectedMemoryName}"
-            content_append(request.messages, 'system', group_message)
+    # 公式格式（固定）
+    if settings['tools']['formula']['enabled']:
+        latex_message = "\n\n当你想使用latex公式时，你必须是用 ['$', '$'] 作为行内公式定界符，以及 ['$$', '$$'] 作为行间公式定界符。\n\n"
+        content_append(request.messages, 'system', latex_message)
 
+    # 语言要求（固定）
+    if settings['tools']['language']['enabled']:
+        language_message = f"请使用{settings['tools']['language']['language']}语言说话！，不要使用其他语言，语气风格为{settings['tools']['language']['tone']}\n\n"
+        content_append(request.messages, 'system', language_message)
+
+    # 贴纸包（固定）
+    if settings["stickerPacks"]:
+        for stickerPack in settings["stickerPacks"]:
+            if stickerPack["enabled"]:
+                sticker_message = f"\n\n图片库名称：{stickerPack['name']}，包含的图片：{json.dumps(stickerPack['stickers'])}\n\n"
+                content_append(request.messages, 'system', sticker_message)
+        content_append(request.messages, 'system', "\n\n当你需要使用图片时，请将图片的URL放在markdown的图片标签中，例如：\n\n<silence>![图片名](图片URL)</silence>\n\n，图片markdown必须另起并且独占一行！<silence>和</silence>是控制TTS的静音标签，表示这个图片部分不会进入语音合成\n\n你必须在回复中正确使用 <silence> 标签来包裹图片的 Markdown 语法\n\n<silence>和</silence>与图片的 Markdown 语法之间不能有空格和回车，会导致解析失败！\n\n")
+
+    # text2img 规则（固定）
+    if settings['text2imgSettings']['enabled']:
+        text2img_messages = "\n\n当你使用画图工具后，必须将图片的URL放在markdown的图片标签中，例如：\n\n<silence>![图片名](图片URL)</silence>\n\n，图片markdown必须另起并且独占一行！请主动发给用户，工具返回的结果，用户看不到！<silence>和</silence>是控制TTS的静音标签，表示这个图片部分不会进入语音合成\n\n你必须在回复中正确使用 <silence> 标签来包裹图片的 Markdown 语法\n\n注意！！！<silence>和</silence>与图片的 Markdown 语法之间不能有空格和回车，会导致解析失败！\n\n"
+        content_append(request.messages, 'system', text2img_messages)
+
+    # VRM 表情（固定）
+    if settings['VRMConfig']['enabledExpressions'] and not request.is_app_bot and not request.is_sub_agent:
+        Expression_messages = "\n\n你可以使用以下表情：<happy> <angry> <sad> <neutral> <surprised> <relaxed>\n\n你可以在句子开头插入表情符号以驱动人物的当前表情，注意！你需要将表情符号放到句子的开头（如果有音色标签，就放到音色标签之后即可），才能在说这句话的时候同步做表情，例如：<angry>我真的生气了。<surprised>哇！<happy>我好开心。\n\n一定要把表情符号跟要做表情的句子放在同一行，如果表情符号和要做表情的句子中间有换行符，表情也将不会生效，例如：\n\n<happy>\n我好开心。\n\n此时，表情符号将不会生效。"
+        content_append(request.messages, 'system', Expression_messages)
+
+    # VRM 动作（固定）
+    if settings['VRMConfig']['enabledMotions'] and not request.is_app_bot and not request.is_sub_agent:
+        motions = settings['VRMConfig']['defaultMotions'] + settings['VRMConfig']['userMotions']
+        motion_tags = [f"<{m.get('name','')}>" for m in motions]
+        print(motion_tags)
+        Motion_messages = (
+            "\n\n你可以使用以下动作："
+            + ", ".join(motion_tags) +
+            "\n\n你可以在句子开头插入动作符号以驱动人物的当前动作，注意！你需要将动作符号放到句子的开头（如果有音色标签，就放到音色标签之后即可），"
+            "才能在说这句话的时候同步做动作，例如：<scratchHead>我真的生气了。<playFingers>哇！<akimbo>我好开心。\n\n"
+            "一定要把动作符号跟要做动作的句子放在同一行，如果动作符号和要做动作的句子中间有换行符，"
+            "动作也将不会生效，例如：\n\n<playFingers>\n我好开心。\n\n此时，动作符号将不会生效。"
+        )
+        content_append(request.messages, 'system', Motion_messages)
+
+    # TTS 规则（固定，原用 prepend 改为 append）
     newttsList = []
     Narrator_label = "Narrator"
-    if settings['ttsSettings']['enabled']  and not request.is_sub_agent:
-        if settings['ttsSettings']['newtts'] and settings['memorySettings']['is_memory']  and not request.is_app_bot:
-            # 遍历settings['ttsSettings']['newtts']，获取所有包含enabled: true的key
+    if settings['ttsSettings']['enabled'] and not request.is_sub_agent:
+        # 获取角色名称
+        cur_memory_tts = None
+        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"]:
+            memoryId = settings["memorySettings"]["selectedMemory"]
+            for memory in settings["memories"]:
+                if memory["id"] == memoryId:
+                    cur_memory_tts = memory
+                    break
+        selectedMemoryName_tts = cur_memory_tts["name"] if cur_memory_tts else settings["memorySettings"]["selectedMemory"]
+
+        if settings['ttsSettings']['newtts'] and settings['memorySettings']['is_memory'] and not request.is_app_bot:
             for key in settings['ttsSettings']['newtts']:
                 if settings['ttsSettings']['newtts'][key]['enabled']:
                     newttsList.append(key)
             if newttsList:
                 finalttsList = ["<silence>"]
-                # 用 name 去匹配音色列表（假设音色配置用的也是 name）
-                if selectedMemoryName in newttsList:
-                    finalttsList.append("<"+selectedMemoryName+">")
+                if selectedMemoryName_tts in newttsList:
+                    finalttsList.append("<"+selectedMemoryName_tts+">")
                 if "Narrator" in newttsList:
                     finalttsList.append("<Narrator>")
                     Narrator_label = "Narrator"
@@ -2495,7 +2366,6 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
                 finalttsList = json.dumps(finalttsList, ensure_ascii=False, indent=4)
                 print("可用音色：",finalttsList)
                 
-                # 修复：示例中的角色名也用 selectedMemoryName
                 newtts_messages = f"""
 你生成的内容都会被TTS模型转换成语音。
 
@@ -2511,7 +2381,7 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 
 注意！如果是你扮演的角色的名字在音色列表里，你必须用这个音色标签将你扮演的角色说话的部分括起来！
 
-只要是非人物说话的部分，都视为旁白！角色音色应该标记在人物说话的前后！例如：`<{Narrator_label}>现在是下午三点，她说道：</{Narrator_label}><{selectedMemoryName}>天气真好哇！</{selectedMemoryName}><silence>(眼睛笑成了一条线)</silence><{Narrator_label}>说完她伸了个懒腰。</{Narrator_label}><{selectedMemoryName}>我们出去玩吧！</{selectedMemoryName}>`
+只要是非人物说话的部分，都视为旁白！角色音色应该标记在人物说话的前后！例如：`<{Narrator_label}>现在是下午三点，她说道：</{Narrator_label}><{selectedMemoryName_tts}>天气真好哇！</{selectedMemoryName_tts}><silence>(眼睛笑成了一条线)</silence><{Narrator_label}>说完她伸了个懒腰。</{Narrator_label}><{selectedMemoryName_tts}>我们出去玩吧！</{selectedMemoryName_tts}>`
 
 还有注意！<音色名></音色名>之间不能嵌套，只能并列，并且<音色名>和</音色名>必须成对出现，防止出现音色混乱！
 
@@ -2520,158 +2390,16 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 <silence></silence>标签最好用于图片的markdown语法、网页链接等不适合语音合成的部分，并且<silence></silence>标签必须另起一行，并且独占一行！<silence></silence>标签与图片的markdown语法之间不能有空格和回车，否则会导致解析失败！比如<silence>![example](https://example.com/example.png)</silence>\n\n就可以正确解析图片，但是<silence>\n![example](https://example.com/example.png)\n</silence>就会导致前端无法显示这个图片！\n\n
 
 注意！你最好只使用你正在扮演的角色音色和旁白音色，不要使用其他角色音色，除非你明确知道你在做什么！\n\n"""
-                
-                content_prepend(request.messages, 'system', newtts_messages)
+                content_append(request.messages, 'system', newtts_messages)  # 改为 append
         else:
             tts_messages = f"""你生成的内容都会被TTS模型转换成语音。<silence></silence>表示静音，被<silence></silence>标签括起来的部分不会进入语音合成。\n\n
 
 如果没有什么需要静音的文字，也没有必要强行使用<silence></silence>标签，因为这样会导致语音合成速度变慢！
 
 <silence></silence>标签最好用于图片的markdown语法、网页链接等不适合语音合成的部分，并且<silence></silence>标签必须另起一行，并且独占一行！<silence></silence>标签与图片的markdown语法之间不能有空格和回车，否则会导致解析失败！比如<silence>![example](https://example.com/example.png)</silence>\n\n就可以正确解析图片，但是<silence>\n![example](https://example.com/example.png)\n</silence>就会导致前端无法显示这个图片！\n\n"""
-            content_prepend(request.messages, 'system', tts_messages)
-    if settings['vision']['desktopVision'] and not request.is_app_bot  and not request.is_sub_agent:
-        desktop_message = "\n\n用户与你对话时，如果发了图片给你，有可能是给你发当前的桌面截图。\n\n"
-        content_append(request.messages, 'system', desktop_message)
-    if settings['tools']['time']['enabled'] and settings['tools']['time']['triggerMode'] == 'beforeThinking':
-        time_message = f"\n\n最后一条消息发送时间：{local_timezone}  {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n\n"
-        content_prepend(request.messages, 'system', time_message)
-    if settings['tools']['inference']['enabled']:
-        inference_message = "回答用户前请先思考推理，再回答问题，你的思考推理的过程必须放在<think>与</think>之间。\n\n"
-        content_prepend(request.messages, 'user', f"{inference_message}\n\n用户：")
-    if settings['tools']['formula']['enabled']:
-        latex_message = "\n\n当你想使用latex公式时，你必须是用 ['$', '$'] 作为行内公式定界符，以及 ['$$', '$$'] 作为行间公式定界符。\n\n"
-        content_append(request.messages, 'system', latex_message)
-    if settings['tools']['language']['enabled']:
-        language_message = f"请使用{settings['tools']['language']['language']}语言说话！，不要使用其他语言，语气风格为{settings['tools']['language']['tone']}\n\n"
-        content_append(request.messages, 'system', language_message)
-    if settings["stickerPacks"]:
-        for stickerPack in settings["stickerPacks"]:
-            if stickerPack["enabled"]:
-                sticker_message = f"\n\n图片库名称：{stickerPack['name']}，包含的图片：{json.dumps(stickerPack['stickers'])}\n\n"
-                content_append(request.messages, 'system', sticker_message)
-        content_append(request.messages, 'system', "\n\n当你需要使用图片时，请将图片的URL放在markdown的图片标签中，例如：\n\n<silence>![图片名](图片URL)</silence>\n\n，图片markdown必须另起并且独占一行！<silence>和</silence>是控制TTS的静音标签，表示这个图片部分不会进入语音合成\n\n你必须在回复中正确使用 <silence> 标签来包裹图片的 Markdown 语法\n\n<silence>和</silence>与图片的 Markdown 语法之间不能有空格和回车，会导致解析失败！\n\n")
-    if settings['text2imgSettings']['enabled']:
-        text2img_messages = "\n\n当你使用画图工具后，必须将图片的URL放在markdown的图片标签中，例如：\n\n<silence>![图片名](图片URL)</silence>\n\n，图片markdown必须另起并且独占一行！请主动发给用户，工具返回的结果，用户看不到！<silence>和</silence>是控制TTS的静音标签，表示这个图片部分不会进入语音合成\n\n你必须在回复中正确使用 <silence> 标签来包裹图片的 Markdown 语法\n\n注意！！！<silence>和</silence>与图片的 Markdown 语法之间不能有空格和回车，会导致解析失败！\n\n"
-        content_append(request.messages, 'system', text2img_messages)
-    if settings['VRMConfig']['enabledExpressions'] and not request.is_app_bot and not request.is_sub_agent:
-        Expression_messages = "\n\n你可以使用以下表情：<happy> <angry> <sad> <neutral> <surprised> <relaxed>\n\n你可以在句子开头插入表情符号以驱动人物的当前表情，注意！你需要将表情符号放到句子的开头（如果有音色标签，就放到音色标签之后即可），才能在说这句话的时候同步做表情，例如：<angry>我真的生气了。<surprised>哇！<happy>我好开心。\n\n一定要把表情符号跟要做表情的句子放在同一行，如果表情符号和要做表情的句子中间有换行符，表情也将不会生效，例如：\n\n<happy>\n我好开心。\n\n此时，表情符号将不会生效。"
-        content_append(request.messages, 'system', Expression_messages)
-    if settings['VRMConfig']['enabledMotions'] and not request.is_app_bot and not request.is_sub_agent:
-        # 1. 合并动作列表
-        motions = settings['VRMConfig']['defaultMotions'] + settings['VRMConfig']['userMotions']
-        # 2. 给每个动作加上 <>
-        motion_tags = [f"<{m.get('name','')}>" for m in motions]
-        print(motion_tags)
-        # 3. 拼成可用表情提示
-        Motion_messages = (
-            "\n\n你可以使用以下动作："
-            + ", ".join(motion_tags) +
-            "\n\n你可以在句子开头插入动作符号以驱动人物的当前动作，注意！你需要将动作符号放到句子的开头（如果有音色标签，就放到音色标签之后即可），"
-            "才能在说这句话的时候同步做动作，例如：<scratchHead>我真的生气了。<playFingers>哇！<akimbo>我好开心。\n\n"
-            "一定要把动作符号跟要做动作的句子放在同一行，如果动作符号和要做动作的句子中间有换行符，"
-            "动作也将不会生效，例如：\n\n<playFingers>\n我好开心。\n\n此时，动作符号将不会生效。"
-        )
+            content_append(request.messages, 'system', tts_messages)  # 改为 append
 
-        content_append(request.messages, 'system', Motion_messages)
-
-    # ==================== VTube Studio (VTS) 提示词注入 ====================
-    from py.vts_manager import vts_instance
-    
-    if vts_instance.is_running and not request.is_app_bot and not request.is_sub_agent:
-        
-        # 获取表情名和动作名
-        all_exp_names = [f"<{e['name']}>" for e in vts_instance.model_expressions]
-        all_mot_names = [f"<{h['name']}>" for h in vts_instance.available_hotkeys]
-        
-        # 获取当前状态（得益于刚才增加的 @property）
-        active_list = vts_instance.current_active_expressions
-        status_text = "、".join(active_list) if active_list else "平静"
-
-        if all_exp_names or all_mot_names:
-            vts_prompt = f"""
-\n\n# 人物表现控制
-你当前正在控制 Live2D 模型。当前表情状态：{status_text}。
-
-【可用表情标签】(发送即表示切换，并自动重置其他表情)
-{" ".join(all_exp_names)}
-
-【可用动作标签】(触发一次性动画)
-{" ".join(all_mot_names)}
-
-【使用规则】
-1. 每一句回复开头都可以插入一个标签。
-2. 表情标签是排他性的：如果你发送新的表情标签，系统会自动为你关闭旧表情。
-3. 标签必须放在句首，严禁换行。
-"""
-            content_append(request.messages, 'system', vts_prompt)
-
-
-    # ==================== 好感度/数值系统注入 ====================
-    love_settings = settings.get('loveSettings', {})
-    if love_settings.get('enabled', False) and not request.is_app_bot and not request.is_sub_agent:
-        
-        # 1. 获取默认的管理员/主用户名称
-        default_user = settings.get("memorySettings", {}).get("userName", "").strip() or "User"
-        
-        # 2. 读取数据库
-        from py.affection_system import load_affection_data 
-        affection_data = await load_affection_data()
-
-        dimensions = love_settings.get("dimensions", ["love", "Familiarity"])
-        custom_prompt = love_settings.get("prompt", "根据当前对话的内容、情感色彩以及你的角色设定，合理地评估或微调这些数值（每次增减幅度建议在-5到+5之间）。")
-        
-        # 3. 扫描当前用户输入，提取数据库中已知的用户数据
-        user_prompt = ""
-        if request.messages and request.messages[-1]['role'] == 'user':
-            user_prompt = str(request.messages[-1].get('content', ''))
-
-        relevant_users = set()
-        # 如果输入中提到了数据库里已经存在的人，把他们的数据提取出来
-        for known_name in affection_data.keys():
-            if known_name and known_name in user_prompt:
-                relevant_users.add(known_name)
-        
-        # 默认用户的数据也给它作为兜底参考
-        if default_user in affection_data:
-            relevant_users.add(default_user)
-            
-        status_block = ""
-        if relevant_users:
-            status_block = "目前的已知羁绊数据参考：\n"
-            for ru in relevant_users:
-                user_stats = affection_data.get(ru, {})
-                stats_str = ", ".join([f"{dim}: {user_stats.get(dim, 0)}" for dim in dimensions])
-                status_block += f"- {ru}: {stats_str}\n"
-
-        # 生成示例标签（极其关键：这里用占位符，不写死任何名字，引导AI自己填）
-        tag_example = "<user=发言者的真实名字"
-        for dim in dimensions:
-            tag_example += f" {dim}=1"
-        tag_example += ">"
-
-        # 4. 构建最终提示词（引入“动态识别发言者”指令）
-        affection_message = f"""
-
-# 角色羁绊与数值系统
-{status_block}
-【更新规则】
-{custom_prompt}
-
-【动态识别发言者】
-请准确识别当前最新消息的**实际发言者**：
-- 如果消息是类似“某某发送弹幕：”、“某某说：”的格式，发言者就是该名字（例如“小包”）。
-- 如果没有带有这种特定的名字前缀，则默认当前的发言者是“{default_user}”。
-
-你必须在每次回复的**绝对最末尾**（所有正文、代码、表情都输出完毕之后），输出一个隐藏的数据标签来记录**该发言者**的最新数值（如果是第一次见面的新用户，请直接给一个合理的初始值）。
-格式必须严格遵守以下示例（将“发言者的真实名字”替换为你识别出的真实名字，且必须包含所有维度）：
-{tag_example}
-
-注意：系统会自动隐藏<>包裹的文本，请直接输出标签，绝对不要在标签前后加任何解释、加粗或Markdown代码块包裹！
-"""
-        # 将提示词追加到 system prompt 中
-        content_append(request.messages, 'system', affection_message)
-    # ==================== 好感度系统注入结束 ====================
-
+    # A2UI 能力（固定，内容很长，放在固定区末尾）
     if settings['tools']['a2ui']['enabled'] and not request.is_app_bot and not request.is_sub_agent:
         A2UI_messages = """
 除了使用自然语言回答用户问题外，你还拥有一个特殊能力：**渲染 A2UI 界面**。
@@ -2877,6 +2605,245 @@ Assistant: 表格如下：
 显然，这个需求下，直接使用markdown语法发送表格更加适合，而不是使用A2UI！
 """
         content_append(request.messages, 'system', A2UI_messages)
+
+    # ==================== 半固定文件注入（系统消息，变化频率低） ====================
+    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False):
+        # MEMORY.md
+        memory_file = Path(cwd) / ".agent" / "MEMORY.md"
+        if memory_file.exists() and memory_file.is_file():
+            try:
+                import aiofiles
+                async with aiofiles.open(memory_file, 'r', encoding='utf-8') as mf:
+                    mem_content = await mf.read()
+                if mem_content.strip():
+                    content_append(request.messages, 'system', f"\n\n**MEMORY.md**:\n{mem_content}\n\n")
+            except Exception as e:
+                print(f"读取 MEMORY.md 失败: {e}")
+
+        # AGENTS.md
+        try:
+            agents_md = await read_agents_md(cwd)
+            if agents_md:
+                content_append(request.messages, 'system', " **重要事项**（.agent/AGENTS.md）：\n\n"+agents_md+"\n\n")
+        except Exception as e:
+            print(f"[Agent Loader] 跳过AGENTS.md加载: {e}")
+            pass
+
+        # 项目技能摘要
+        try:
+            skills_message = await get_project_skills_summary(cwd, visibilityScope)
+            if skills_message:
+                content_append(request.messages, 'system', skills_message)
+        except Exception as e:
+            print(f"[Skill Loader] 扫描技能失败: {e}")
+
+    # 群聊模式（半固定，成员变化才会变）
+    cur_memory = None
+    if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"]:
+        memoryId = settings["memorySettings"]["selectedMemory"]
+        for memory in settings["memories"]:
+            if memory["id"] == memoryId:
+                cur_memory = memory
+                break
+    selectedMemoryName = cur_memory["name"] if cur_memory else settings["memorySettings"]["selectedMemory"]
+
+    def resolve_agent_name(raw_model):
+        if raw_model.startswith("memory/"):
+            parts = raw_model.split('/', 2)
+            if len(parts) >= 2:
+                memory_id = parts[1]
+                for memory in settings["memories"]:
+                    if memory["id"] == memory_id:
+                        return memory["name"]
+                return raw_model
+        return raw_model
+
+    if settings["isGroupMode"] and not request.is_app_bot and not request.is_sub_agent:
+        selectedGroupAgents = settings['selectedGroupAgents']
+        if selectedGroupAgents:
+            userName = "user"
+            if settings["memorySettings"]["userName"]:
+                userName = settings["memorySettings"]["userName"]
+            selectedGroupAgents.append(userName)
+            agent_names = [resolve_agent_name(agent) for agent in selectedGroupAgents]
+            group_message = f"\n\n你当前处于群聊模式，群聊中的角色有：{agent_names}\n\n你在扮演{selectedMemoryName}"
+            content_append(request.messages, 'system', group_message)
+
+    # ==================== 动态内容收集（最后注入，变化频率从低到高） ====================
+    # 1. 本地环境信息（如果 local 环境，可能包含动态内容，放在动态区）
+    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and engine == "local":
+        system_context_local = get_system_context()
+        if system_context_local:
+            content_append(request.messages, 'system', system_context_local)
+
+    # 2. 待办事项
+    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and engine in ["ds", "local"]:
+        try:
+            todos = await read_todos_local(cwd)
+            if isinstance(todos, list) and len(todos) > 0:
+                priority_icons = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+                status_icons = {"pending": "⏳", "in_progress": "🔄", "done": "✅", "cancelled": "❌"}
+                priority_order = {"high": 0, "medium": 1, "low": 2}
+                todos_sorted = sorted(todos, key=lambda x: (priority_order.get(x.get('priority', 'medium'), 1), x.get('created_at', '')))
+                todo_lines = ["\n\n当你完成一个事项后，请记得使用todo_write_tool更新项目待办事项，所有事项结束后，可以删除本事项文件\n\n📋 **当前项目待办事项**（.agent/ai_todos.json）：\n"]
+                pending_count = 0
+                for todo in todos_sorted:
+                    status = todo.get('status', 'pending')
+                    if status != 'done':
+                        pending_count += 1
+                        icon = status_icons.get(status, "⏳")
+                        priority = priority_icons.get(todo.get('priority', 'medium'), "🟡")
+                        content_text = todo.get('content', '无内容')[:50]
+                        if len(todo.get('content', '')) > 50:
+                            content_text += "..."
+                        todo_lines.append(f"{icon} {priority} [{todo.get('id', 'unknown')}] {content_text}")
+                if pending_count == 0:
+                    todo_lines.append("✨ 当前没有待办事项，所有任务已完成！")
+                else:
+                    todo_lines.append(f"\n*共有 {pending_count} 个未完成任务*")
+                todo_message = "\n".join(todo_lines)
+                content_append(request.messages, 'system', todo_message)
+        except Exception as e:
+            print(f"[Todo Loader] 跳过待办事项加载: {e}")
+
+    # 3. 子任务进度（cowork 模式）
+    if permissionMode == "cowork" and not request.is_sub_agent:
+        if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and engine in ["ds", "local"]:
+            sub_task_context = await query_task_progress(cwd)
+            if sub_task_context:
+                content_append(request.messages, 'system', sub_task_context)
+
+    # 4. VTS 状态（每轮表情可能不同）
+    from py.vts_manager import vts_instance
+    if vts_instance.is_running and not request.is_app_bot and not request.is_sub_agent:
+        all_exp_names = [f"<{e['name']}>" for e in vts_instance.model_expressions]
+        all_mot_names = [f"<{h['name']}>" for h in vts_instance.available_hotkeys]
+        active_list = vts_instance.current_active_expressions
+        status_text = "、".join(active_list) if active_list else "平静"
+        if all_exp_names or all_mot_names:
+            vts_prompt = f"""
+\n\n# 人物表现控制
+你当前正在控制 Live2D 模型。当前表情状态：{status_text}。
+
+【可用表情标签】(发送即表示切换，并自动重置其他表情)
+{" ".join(all_exp_names)}
+
+【可用动作标签】(触发一次性动画)
+{" ".join(all_mot_names)}
+
+【使用规则】
+1. 每一句回复开头都可以插入一个标签。
+2. 表情标签是排他性的：如果你发送新的表情标签，系统会自动为你关闭旧表情。
+3. 标签必须放在句首，严禁换行。
+"""
+            content_append(request.messages, 'system', vts_prompt)
+
+    # 5. 好感度数值（每轮可能变化）
+    love_settings = settings.get('loveSettings', {})
+    if love_settings.get('enabled', False) and not request.is_app_bot and not request.is_sub_agent:
+        default_user = settings.get("memorySettings", {}).get("userName", "").strip() or "User"
+        from py.affection_system import load_affection_data 
+        affection_data = await load_affection_data()
+        dimensions = love_settings.get("dimensions", ["love", "Familiarity"])
+        custom_prompt = love_settings.get("prompt", "根据当前对话的内容、情感色彩以及你的角色设定，合理地评估或微调这些数值（每次增减幅度建议在-5到+5之间）。")
+        user_prompt_text = ""
+        if request.messages and request.messages[-1]['role'] == 'user':
+            user_prompt_text = str(request.messages[-1].get('content', ''))
+        relevant_users = set()
+        for known_name in affection_data.keys():
+            if known_name and known_name in user_prompt_text:
+                relevant_users.add(known_name)
+        if default_user in affection_data:
+            relevant_users.add(default_user)
+        status_block = ""
+        if relevant_users:
+            status_block = "目前的已知羁绊数据参考：\n"
+            for ru in relevant_users:
+                user_stats = affection_data.get(ru, {})
+                stats_str = ", ".join([f"{dim}: {user_stats.get(dim, 0)}" for dim in dimensions])
+                status_block += f"- {ru}: {stats_str}\n"
+        tag_example = "<user=发言者的真实名字"
+        for dim in dimensions:
+            tag_example += f" {dim}=1"
+        tag_example += ">"
+        affection_message = f"""
+
+# 角色羁绊与数值系统
+{status_block}
+【更新规则】
+{custom_prompt}
+
+【动态识别发言者】
+请准确识别当前最新消息的**实际发言者**：
+- 如果消息是类似“某某发送弹幕：”、“某某说：”的格式，发言者就是该名字（例如“小包”）。
+- 如果没有带有这种特定的名字前缀，则默认当前的发言者是“{default_user}”。
+
+你必须在每次回复的**绝对最末尾**（所有正文、代码、表情都输出完毕之后），输出一个隐藏的数据标签来记录**该发言者**的最新数值（如果是第一次见面的新用户，请直接给一个合理的初始值）。
+格式必须严格遵守以下示例（将“发言者的真实名字”替换为你识别出的真实名字，且必须包含所有维度）：
+{tag_example}
+
+注意：系统会自动隐藏<>包裹的文本，请直接输出标签，绝对不要在标签前后加任何解释、加粗或Markdown代码块包裹！
+"""
+        content_append(request.messages, 'system', affection_message)
+
+    # ==================== 极短动态内容注入到用户消息末尾 ====================
+    # 快捷指令响应（仅当轮触发）
+    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and cli_settings.get("shortcut", False):
+        user_text = ""
+        if request.messages and request.messages[-1]['role'] == 'user':
+            user_msg_content = request.messages[-1].get('content', '')
+            if isinstance(user_msg_content, str):
+                user_text = user_msg_content
+            elif isinstance(user_msg_content, list):
+                user_text = "".join([item.get('text', '') for item in user_msg_content if item.get('type') == 'text'])
+        user_text_trimmed = user_text.strip()
+        if user_text_trimmed:
+            import datetime
+            if user_text_trimmed.startswith('#'):
+                mem_content_to_save = user_text_trimmed[1:].strip()
+                if mem_content_to_save:
+                    try:
+                        agent_dir = Path(cwd) / ".agent"
+                        agent_dir.mkdir(parents=True, exist_ok=True)
+                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        append_text = f"\n- [{timestamp}] {mem_content_to_save}"
+                        import aiofiles
+                        async with aiofiles.open(Path(cwd) / ".agent" / "MEMORY.md", 'a', encoding='utf-8') as mf:
+                            await mf.write(append_text)
+                        # 注入到用户消息末尾
+                        if request.messages[-1]['role'] == 'user':
+                            request.messages[-1]['content'] += f"\n\n[系统提示：用户刚刚使用'#'指令保存了以下记忆：“{mem_content_to_save}”，请简短确认你已记住。]"
+                    except Exception as e:
+                        print(f"保存 MEMORY.md 失败: {e}")
+            elif user_text_trimmed.startswith('/'):
+                parts = user_text_trimmed[1:].split()
+                if parts:
+                    skill_name = parts[0]
+                    skill_dir = Path(cwd) / ".agent" / "skills" / skill_name
+                    if skill_dir.exists() and skill_dir.is_dir():
+                        doc_file_path = None
+                        for name in ["SKILL.md", "skill.md", "SKILLS.md", "skills.md"]:
+                            if (skill_dir / name).exists():
+                                doc_file_path = skill_dir / name
+                                break
+                        if doc_file_path:
+                            try:
+                                import aiofiles
+                                async with aiofiles.open(doc_file_path, 'r', encoding='utf-8') as f:
+                                    skill_content = await f.read()
+                                # 注入到用户消息末尾
+                                if request.messages[-1]['role'] == 'user':
+                                    request.messages[-1]['content'] += f"\n\n[系统提示：用户激活了技能“{skill_name}”，技能说明：\n{skill_content}\n请严格按技能说明处理用户请求。]"
+                            except Exception as e:
+                                print(f"读取技能文档失败: {e}")
+
+    # 时间戳（每轮绝对变化）
+    if settings['tools']['time']['enabled'] and settings['tools']['time']['triggerMode'] == 'beforeThinking':
+        time_message = f"\n\n最后一条消息发送时间：{local_timezone}  {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}"
+        # 追加到用户消息末尾
+        if request.messages and request.messages[-1]['role'] == 'user':
+            request.messages[-1]['content'] += time_message
+
     print(f"系统提示：{request.messages[0]['content']}")
     return request
 
@@ -3625,90 +3592,97 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
             # 修复字符串拼接错误
             content_append(request.messages, 'system', fileLinks_message)
             source_prompt += fileLinks_message
+
         user_prompt = request.messages[-1].get('content') or ""
-        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != ""  and not request.is_sub_agent:
+
+        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != "" and not request.is_sub_agent:
+            # 用户名提示（固定）
             if settings["memorySettings"]["userName"]:
                 print("添加用户名：\n\n" + settings["memorySettings"]["userName"] + "\n\n用户名结束\n\n")
                 content_append(request.messages, 'system', "与你交流的默认用户名为：\n\n" + settings["memorySettings"]["userName"] + "\n\n注意！除非用户消息中提到了是其他用户发送，否则视为默认用户发送的消息\n\n")
-            lore_content = ""
-            assistant_reply = ""
-            # 找出request.messages中上次的assistant回复
-            for i in range(len(request.messages)-1, -1, -1):
-                if request.messages[i]['role'] == 'assistant':
-                    assistant_reply = request.messages[i]['content']
-                    break
-            if cur_memory["characterBook"]:
-                for lore in cur_memory["characterBook"]:
-                    # lore['keysRaw'] 按照换行符分割，并去除空字符串
-                    lore_keys = lore["keysRaw"].split("\n")
-                    lore_keys = [key for key in lore_keys if key != ""]
-                    print(lore_keys)
-                    # 如果lore_keys不为空，并且lore_keys的任意一个元素在user_prompt或者assistant_reply中，则添加lore['content']到lore_content中
-                    if lore_keys != [] and any(key in user_prompt or key in assistant_reply for key in lore_keys):
-                        lore_content += lore['content'] + "\n\n"
-            if lore_content:
-                if settings["memorySettings"]["userName"]:
-                    # 替换lore_content中的{{user}}为settings["memorySettings"]["userName"]
-                    lore_content = lore_content.replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换lore_content中的{{char}}为cur_memory["name"]
-                lore_content = lore_content.replace("{{char}}", cur_memory["name"])
-                print("添加世界观设定：\n\n" + lore_content + "\n\n世界观设定结束\n\n")
-                content_append(request.messages, 'system', "世界观设定：\n\n" + lore_content + "\n\n世界观设定结束\n\n")
+
+            # 固定人设：角色描述、性格、对话示例、自定义 systemPrompt、通用 systemPrompt
             if cur_memory["description"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["description"]中的{{user}}为settings["memorySettings"]["userName"]
                     cur_memory["description"] = cur_memory["description"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["description"]中的{{char}}为cur_memory["name"]
                 cur_memory["description"] = cur_memory["description"].replace("{{char}}", cur_memory["name"])
                 print("添加角色设定：\n\n" + cur_memory["description"] + "\n\n角色设定结束\n\n")
                 content_append(request.messages, 'system', "角色设定：\n\n" + cur_memory["description"] + "\n\n角色设定结束\n\n")
+
             if cur_memory["personality"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["personality"]中的{{user}}为settings["memorySettings"]["userName"]
                     cur_memory["personality"] = cur_memory["personality"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["personality"]中的{{char}}为cur_memory["name"]
                 cur_memory["personality"] = cur_memory["personality"].replace("{{char}}", cur_memory["name"])
                 print("添加性格设定：\n\n" + cur_memory["personality"] + "\n\n性格设定结束\n\n")
-                content_append(request.messages, 'system', "性格设定：\n\n" + cur_memory["personality"] + "\n\n性格设定结束\n\n") 
+                content_append(request.messages, 'system', "性格设定：\n\n" + cur_memory["personality"] + "\n\n性格设定结束\n\n")
+
             if cur_memory['mesExample']:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["mesExample"]中的{{user}}为settings["memorySettings"]["userName"]
-                    cur_memory["mesExample"] = cur_memory["mesExample"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["mesExample"]中的{{char}}为cur_memory["name"]
-                cur_memory["mesExample"] = cur_memory["mesExample"].replace("{{char}}", cur_memory["name"])
+                    cur_memory['mesExample'] = cur_memory['mesExample'].replace("{{user}}", settings["memorySettings"]["userName"])
+                cur_memory['mesExample'] = cur_memory['mesExample'].replace("{{char}}", cur_memory["name"])
                 print("添加对话示例：\n\n" + cur_memory['mesExample'] + "\n\n对话示例结束\n\n")
                 content_append(request.messages, 'system', "对话示例：\n\n" + cur_memory['mesExample'] + "\n\n对话示例结束\n\n")
+
             if cur_memory["systemPrompt"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["systemPrompt"]中的{{user}}为settings["memorySettings"]["userName"]
                     cur_memory["systemPrompt"] = cur_memory["systemPrompt"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["systemPrompt"]中的{{char}}为cur_memory["name"]
                 cur_memory["systemPrompt"] = cur_memory["systemPrompt"].replace("{{char}}", cur_memory["name"])
                 content_append(request.messages, 'system', "\n\n" + cur_memory["systemPrompt"] + "\n\n")
+
             if settings["memorySettings"]["genericSystemPrompt"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换settings["memorySettings"]["genericSystemPrompt"]中的{{user}}为settings["memorySettings"]["userName"]
                     settings["memorySettings"]["genericSystemPrompt"] = settings["memorySettings"]["genericSystemPrompt"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["systemPrompt"]中的{{char}}为cur_memory["name"]
                 settings["memorySettings"]["genericSystemPrompt"] = settings["memorySettings"]["genericSystemPrompt"].replace("{{char}}", cur_memory["name"])
                 content_append(request.messages, 'system', "\n\n" + settings["memorySettings"]["genericSystemPrompt"] + "\n\n")
-            if m0 and not request.is_sub_agent:
-                memoryLimit = settings["memorySettings"]["memoryLimit"]
-                try:
-                    # 【核心修改】：使用 asyncio.to_thread 将同步的 search 方法放入线程池运行
-                    # 这样主线程（Event Loop）会被释放，可以去处理 /minilm/embeddings 请求，从而避免死锁
-                    relevant_memories = await asyncio.to_thread(
-                        m0.search, 
-                        query=user_prompt, 
-                        user_id=memoryId, 
-                        limit=memoryLimit
-                    )
-                    relevant_memories = json.dumps(relevant_memories, ensure_ascii=False)
-                except Exception as e:
-                    print("m0.search error:",e)
-                    relevant_memories = ""
-                print("添加相关记忆：\n\n" + relevant_memories + "\n\n相关结束\n\n")
-                content_append(request.messages, 'system', "之前的相关记忆：\n\n" + relevant_memories + "\n\n相关结束\n\n")                   
+
+        # ========== 动态上下文收集（统一追加到用户消息末尾） ==========
+        dynamic_user_context = ""
+
+        # 世界书匹配（动态，基于当前轮输入/回复触发）
+        lore_content = ""
+        assistant_reply = ""
+        for i in range(len(request.messages)-1, -1, -1):
+            if request.messages[i]['role'] == 'assistant':
+                assistant_reply = request.messages[i]['content']
+                break
+
+        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and not request.is_sub_agent:
+            if cur_memory.get("characterBook"):
+                for lore in cur_memory["characterBook"]:
+                    lore_keys = [key for key in lore.get("keysRaw", "").split("\n") if key != ""]
+                    if lore_keys and any(key in user_prompt or key in assistant_reply for key in lore_keys):
+                        lore_content += lore['content'] + "\n\n"
+
+        if lore_content:
+            if settings["memorySettings"]["userName"]:
+                lore_content = lore_content.replace("{{user}}", settings["memorySettings"]["userName"])
+            lore_content = lore_content.replace("{{char}}", cur_memory["name"])
+            print("添加世界观设定（动态，注入到用户消息）：\n\n" + lore_content + "\n\n世界观设定结束\n\n")
+            dynamic_user_context += f"\n\n[世界设定]\n{lore_content}"
+
+        # 记忆检索（动态，基于当前用户输入）
+        if m0 and not request.is_sub_agent:
+            memoryLimit = settings["memorySettings"]["memoryLimit"]
+            try:
+                relevant_memories = await asyncio.to_thread(
+                    m0.search,
+                    query=user_prompt,
+                    user_id=settings["memorySettings"]["selectedMemory"],
+                    limit=memoryLimit
+                )
+                relevant_memories = json.dumps(relevant_memories, ensure_ascii=False)
+            except Exception as e:
+                print("m0.search error:", e)
+                relevant_memories = ""
+            if relevant_memories:
+                print("添加相关记忆（动态，注入到用户消息）：\n\n" + relevant_memories + "\n\n相关结束\n\n")
+                dynamic_user_context += f"\n\n[相关记忆]\n{relevant_memories}"
+
+        # 将动态内容追加到最后一条 user 消息的末尾
+        if dynamic_user_context:
+            if request.messages and request.messages[-1]['role'] == 'user':
+                request.messages[-1]['content'] += dynamic_user_context
+        
         request = await tools_change_messages(request, settings)
         # 如果系统消息为空字符串或者仅包含空白符，则将系统消息改成"you are a helpful assistant."
         if request.messages[0]['role'] == 'system' and not request.messages[0]['content'].strip():
@@ -3907,7 +3881,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                         if all_kb_content:
                             all_kb_content = json.dumps(all_kb_content, ensure_ascii=False, indent=4)
                             kb_message = f"\n\n可参考的知识库内容：{all_kb_content}"
-                            content_append(request.messages, 'user',  f"{kb_message}\n\n用户：{user_prompt}")
+                            content_append(request.messages, 'user',  f"\n\n知识库内容：{all_kb_content}\n\n")
                             tool_chunk = {
                                 "choices": [{
                                     "delta": {
@@ -3958,7 +3932,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                         elif settings['webSearch']['engine'] == 'bochaai':
                             results = await bochaai_search(user_prompt)
                         if results:
-                            content_append(request.messages, 'user',  f"\n\n联网搜索结果：{results}\n\n请根据联网搜索结果组织你的回答，并确保你的回答是准确的。")
+                            content_append(request.messages, 'user',  f"\n\n联网搜索结果：{results}\n\n")
                             tool_chunk = {
                                 "choices": [{
                                     "delta": {
@@ -5803,92 +5777,95 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
             content_append(request.messages, 'system', system_message)
         kb_list = []
         user_prompt = request.messages[-1].get('content') or ""
-        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != "":
-            if settings["memorySettings"]["userName"] and settings["memorySettings"]["userName"] != "user":
+
+        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != "" and not request.is_sub_agent:
+            # 用户名提示（固定）
+            if settings["memorySettings"]["userName"]:
                 print("添加用户名：\n\n" + settings["memorySettings"]["userName"] + "\n\n用户名结束\n\n")
-                content_append(request.messages, 'system', "当前与你交流的人的名字为：\n\n" + settings["memorySettings"]["userName"] + "\n\n")
-            lore_content = ""
-            assistant_reply = ""
-            # 找出request.messages中上次的assistant回复
-            for i in range(len(request.messages)-1, -1, -1):
-                if request.messages[i]['role'] == 'assistant':
-                    assistant_reply = request.messages[i]['content']
-                    break
-            if cur_memory["characterBook"]:
-                for lore in cur_memory["characterBook"]:
-                    # lore['keysRaw'] 按照换行符分割，并去除空字符串
-                    lore_keys = lore["keysRaw"].split("\n")
-                    lore_keys = [key for key in lore_keys if key != ""]
-                    print(lore_keys)
-                    # 如果lore_keys不为空，并且lore_keys的任意一个元素在user_prompt或者assistant_reply中，则添加lore['content']到lore_content中
-                    if lore_keys != [] and any(key in user_prompt or key in assistant_reply for key in lore_keys):
-                        lore_content += lore['content'] + "\n\n"
-            if lore_content:
-                if settings["memorySettings"]["userName"]:
-                    # 替换lore_content中的{{user}}为settings["memorySettings"]["userName"]
-                    lore_content = lore_content.replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换lore_content中的{{char}}为cur_memory["name"]
-                lore_content = lore_content.replace("{{char}}", cur_memory["name"])
-                print("添加世界观设定：\n\n" + lore_content + "\n\n世界观设定结束\n\n")
-                content_append(request.messages, 'system', "世界观设定：\n\n" + lore_content + "\n\n世界观设定结束\n\n")
+                content_append(request.messages, 'system', "与你交流的默认用户名为：\n\n" + settings["memorySettings"]["userName"] + "\n\n注意！除非用户消息中提到了是其他用户发送，否则视为默认用户发送的消息\n\n")
+
+            # 固定人设：角色描述、性格、对话示例、自定义 systemPrompt、通用 systemPrompt
             if cur_memory["description"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["description"]中的{{user}}为settings["memorySettings"]["userName"]
                     cur_memory["description"] = cur_memory["description"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["description"]中的{{char}}为cur_memory["name"]
                 cur_memory["description"] = cur_memory["description"].replace("{{char}}", cur_memory["name"])
                 print("添加角色设定：\n\n" + cur_memory["description"] + "\n\n角色设定结束\n\n")
                 content_append(request.messages, 'system', "角色设定：\n\n" + cur_memory["description"] + "\n\n角色设定结束\n\n")
+
             if cur_memory["personality"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["personality"]中的{{user}}为settings["memorySettings"]["userName"]
                     cur_memory["personality"] = cur_memory["personality"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["personality"]中的{{char}}为cur_memory["name"]
                 cur_memory["personality"] = cur_memory["personality"].replace("{{char}}", cur_memory["name"])
                 print("添加性格设定：\n\n" + cur_memory["personality"] + "\n\n性格设定结束\n\n")
-                content_append(request.messages, 'system', "性格设定：\n\n" + cur_memory["personality"] + "\n\n性格设定结束\n\n") 
+                content_append(request.messages, 'system', "性格设定：\n\n" + cur_memory["personality"] + "\n\n性格设定结束\n\n")
+
             if cur_memory['mesExample']:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["mesExample"]中的{{user}}为settings["memorySettings"]["userName"]
-                    cur_memory["mesExample"] = cur_memory["mesExample"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["mesExample"]中的{{char}}为cur_memory["name"]
-                cur_memory["mesExample"] = cur_memory["mesExample"].replace("{{char}}", cur_memory["name"])
+                    cur_memory['mesExample'] = cur_memory['mesExample'].replace("{{user}}", settings["memorySettings"]["userName"])
+                cur_memory['mesExample'] = cur_memory['mesExample'].replace("{{char}}", cur_memory["name"])
                 print("添加对话示例：\n\n" + cur_memory['mesExample'] + "\n\n对话示例结束\n\n")
                 content_append(request.messages, 'system', "对话示例：\n\n" + cur_memory['mesExample'] + "\n\n对话示例结束\n\n")
+
             if cur_memory["systemPrompt"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换cur_memory["systemPrompt"]中的{{user}}为settings["memorySettings"]["userName"]
                     cur_memory["systemPrompt"] = cur_memory["systemPrompt"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["systemPrompt"]中的{{char}}为cur_memory["name"]
                 cur_memory["systemPrompt"] = cur_memory["systemPrompt"].replace("{{char}}", cur_memory["name"])
-                print("添加系统提示：\n\n" + cur_memory["systemPrompt"] + "\n\n系统提示结束\n\n")
-                content_append(request.messages, 'system', "系统提示：\n\n" + cur_memory["systemPrompt"] + "\n\n系统提示结束\n\n")
+                content_append(request.messages, 'system', "\n\n" + cur_memory["systemPrompt"] + "\n\n")
+
             if settings["memorySettings"]["genericSystemPrompt"]:
                 if settings["memorySettings"]["userName"]:
-                    # 替换settings["memorySettings"]["genericSystemPrompt"]中的{{user}}为settings["memorySettings"]["userName"]
                     settings["memorySettings"]["genericSystemPrompt"] = settings["memorySettings"]["genericSystemPrompt"].replace("{{user}}", settings["memorySettings"]["userName"])
-                # 替换cur_memory["systemPrompt"]中的{{char}}为cur_memory["name"]
                 settings["memorySettings"]["genericSystemPrompt"] = settings["memorySettings"]["genericSystemPrompt"].replace("{{char}}", cur_memory["name"])
-                print("添加系统提示：\n\n" + settings["memorySettings"]["genericSystemPrompt"] + "\n\n系统提示结束\n\n")
-                content_append(request.messages, 'system', "系统提示：\n\n" + settings["memorySettings"]["genericSystemPrompt"] + "\n\n系统提示结束\n\n")
-                    
-            if m0:
-                memoryLimit = settings["memorySettings"]["memoryLimit"]
-                try:
-                    # 【核心修改】：使用 asyncio.to_thread 将同步的 search 方法放入线程池运行
-                    # 这样主线程（Event Loop）会被释放，可以去处理 /minilm/embeddings 请求，从而避免死锁
-                    relevant_memories = await asyncio.to_thread(
-                        m0.search, 
-                        query=user_prompt, 
-                        user_id=memoryId, 
-                        limit=memoryLimit
-                    )
-                    relevant_memories = json.dumps(relevant_memories, ensure_ascii=False)
-                except Exception as e:
-                    print("m0.search error:",e)
-                    relevant_memories = ""
-                print("添加相关记忆：\n\n" + relevant_memories + "\n\n相关结束\n\n")
-                content_append(request.messages, 'system', "之前的相关记忆：\n\n" + relevant_memories + "\n\n相关结束\n\n") 
+                content_append(request.messages, 'system', "\n\n" + settings["memorySettings"]["genericSystemPrompt"] + "\n\n")
+
+        # ========== 动态上下文收集（统一追加到用户消息末尾） ==========
+        dynamic_user_context = ""
+
+        # 世界书匹配（动态，基于当前轮输入/回复触发）
+        lore_content = ""
+        assistant_reply = ""
+        for i in range(len(request.messages)-1, -1, -1):
+            if request.messages[i]['role'] == 'assistant':
+                assistant_reply = request.messages[i]['content']
+                break
+
+        if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and not request.is_sub_agent:
+            if cur_memory.get("characterBook"):
+                for lore in cur_memory["characterBook"]:
+                    lore_keys = [key for key in lore.get("keysRaw", "").split("\n") if key != ""]
+                    if lore_keys and any(key in user_prompt or key in assistant_reply for key in lore_keys):
+                        lore_content += lore['content'] + "\n\n"
+
+        if lore_content:
+            if settings["memorySettings"]["userName"]:
+                lore_content = lore_content.replace("{{user}}", settings["memorySettings"]["userName"])
+            lore_content = lore_content.replace("{{char}}", cur_memory["name"])
+            print("添加世界观设定（动态，注入到用户消息）：\n\n" + lore_content + "\n\n世界观设定结束\n\n")
+            dynamic_user_context += f"\n\n[世界设定]\n{lore_content}"
+
+        # 记忆检索（动态，基于当前用户输入）
+        if m0 and not request.is_sub_agent:
+            memoryLimit = settings["memorySettings"]["memoryLimit"]
+            try:
+                relevant_memories = await asyncio.to_thread(
+                    m0.search,
+                    query=user_prompt,
+                    user_id=settings["memorySettings"]["selectedMemory"],
+                    limit=memoryLimit
+                )
+                relevant_memories = json.dumps(relevant_memories, ensure_ascii=False)
+            except Exception as e:
+                print("m0.search error:", e)
+                relevant_memories = ""
+            if relevant_memories:
+                print("添加相关记忆（动态，注入到用户消息）：\n\n" + relevant_memories + "\n\n相关结束\n\n")
+                dynamic_user_context += f"\n\n[相关记忆]\n{relevant_memories}"
+
+        # 将动态内容追加到最后一条 user 消息的末尾
+        if dynamic_user_context:
+            if request.messages and request.messages[-1]['role'] == 'user':
+                request.messages[-1]['content'] += dynamic_user_context
+        
         if settings["knowledgeBases"]:
             for kb in settings["knowledgeBases"]:
                 if kb["enabled"] and kb["processingStatus"] == "completed":
