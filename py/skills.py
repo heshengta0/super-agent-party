@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
+
+def _validate_skill_id(skill_id: str) -> str:
+    """Validate skill_id contains no path separators or traversal sequences."""
+    if not skill_id or "/" in skill_id or "\\" in skill_id or skill_id in (".", "..") or "\0" in skill_id:
+        raise HTTPException(status_code=400, detail="Invalid skill ID")
+    return skill_id
+
+
 # ==================== 数据模型 ====================
 
 class Skill(BaseModel):
@@ -531,6 +539,7 @@ async def list_skills():
 @router.get("/{skill_id}/content")
 async def get_skill_content(skill_id: str):
     """前端预览：读取 SKILL.md 的全文"""
+    skill_id = _validate_skill_id(skill_id)
     skill_dir = Path(SKILLS_DIR) / skill_id
     if not skill_dir.exists():
         raise HTTPException(status_code=404, detail="技能不存在")
@@ -602,6 +611,7 @@ async def upload_skill_zip(file: UploadFile = File(...)):
 @router.delete("/{skill_id}")
 async def delete_skill(skill_id: str):
     """从全局存储中删除技能"""
+    skill_id = _validate_skill_id(skill_id)
     target = Path(SKILLS_DIR) / skill_id
     if not target.exists():
         raise HTTPException(status_code=404, detail="技能不存在")
@@ -633,6 +643,7 @@ async def get_project_skills_status(path: str):
 @router.post("/sync")
 async def sync_skill_to_project(req: SkillSyncRequest):
     """在全局目录和项目目录之间同步技能"""
+    req.skill_id = _validate_skill_id(req.skill_id)
     if not req.project_path or not os.path.exists(req.project_path):
         raise HTTPException(status_code=400, detail="项目路径无效")
 
