@@ -991,58 +991,6 @@ function updateElement(el, rawMarkdown, formatFn) {
                   v-show="chatAreaOpen">
                 <div class="messages-container" ref="messagesContainer" v-if="!isCapsuleMode" @click.capture="handleMessageLinkClick">
                  
-                  <!-- ✨✨✨ 初始状态中央模式切换器 (含自适应标题与手机端优化) ✨✨✨ -->
-                  <div v-if="messages.length === 0 || (messages.length === 1 && messages[0].role === 'system')" class="initial-mode-switcher-container">
-                    
-                    <!-- 动态标题部分 (对齐参考图中的海豚/雷电图标与提示语) -->
-                    <div class="switcher-header">
-                      <i :class="{
-                        'fa-solid fa-bolt': systemSettings.chatMode === 'standard',
-                        'fa-solid fa-face-smile': systemSettings.chatMode === 'entertainment',
-                        'fa-solid fa-gem': systemSettings.chatMode === 'work'
-                      }"></i>
-                      <span>{{ t('use') + " " }}{{ 
-                        systemSettings.chatMode === 'standard' ? (t('chatUIStandard') || '经典模式') : 
-                        systemSettings.chatMode === 'entertainment' ? (t('chatUIEntertainment') || '娱乐模式') : 
-                        (t('chatUIWork') || '办公模式') 
-                      }}{{" " + t('startConversation') }}</span>
-                    </div>
-
-                    <div class="mode-segmented-control">
-                    
-
-                      <!-- 2. 娱乐模式 -->
-                      <div 
-                        class="segment-option" 
-                        :class="{ active: systemSettings.chatMode === 'entertainment' }"
-                        @click="systemSettings.chatMode = 'entertainment'; autoSaveSettings()"
-                      >
-                        <i class="fa-solid fa-face-smile"></i>
-                        <span>{{ t('chatUIEntertainment') || '娱乐模式' }}</span>
-                      </div>
-
-                      <!-- 1. 经典模式 (原标准模式) -->
-                      <div 
-                        class="segment-option" 
-                        :class="{ active: systemSettings.chatMode === 'standard' }"
-                        @click="systemSettings.chatMode = 'standard'; autoSaveSettings()"
-                      >
-                        <i class="fa-solid fa-bolt"></i>
-                        <span>{{ t('chatUIStandard') || '经典模式' }}</span>
-                      </div>
-
-                      <!-- 3. 办公模式 -->
-                      <div 
-                        class="segment-option" 
-                        :class="{ active: systemSettings.chatMode === 'work' }"
-                        @click="systemSettings.chatMode = 'work'; autoSaveSettings()"
-                      >
-                        <i class="fa-solid fa-gem"></i>
-                        <span>{{ t('chatUIWork') || '办公模式' }}</span>
-                      </div>
-
-                    </div>
-                  </div>
                  
                   <!-- 添加 is-group-mode 类 -->
                   <div v-for="(message, index) in messages" :key="index" class="message" 
@@ -1895,6 +1843,49 @@ function updateElement(el, rawMarkdown, formatFn) {
                             <span class="pill-text">{{ settings?.model !== '' ? settings.model : t('noModelSelected') }}</span>
                           </div>
                         </el-tooltip>
+
+                        <!-- 聊天模式切换下拉按钮 (Chat Mode Dropdown) -->
+                        <el-dropdown 
+                          placement="top" 
+                          trigger="click"
+                          class="status-pill-dropdown"
+                        >
+                          <div class="status-pill">
+                            <el-tooltip :content="t('chatUIMode') || '聊天模式'" placement="top" :show-after="500">
+                              <span style="display: inline-flex; align-items: center; gap: 6px;">
+                                <i :class="{
+                                  'fa-solid fa-bolt': systemSettings.chatMode === 'standard',
+                                  'fa-solid fa-face-smile': systemSettings.chatMode === 'entertainment',
+                                  'fa-solid fa-gem': systemSettings.chatMode === 'work'
+                                }"></i>
+                                <span class="pill-text">
+                                  {{ 
+                                    systemSettings.chatMode === 'standard' ? (t('chatUIStandard') || '经典模式') : 
+                                    systemSettings.chatMode === 'entertainment' ? (t('chatUIEntertainment') || '娱乐模式') : 
+                                    (t('chatUIWork') || '办公模式') 
+                                  }}
+                                </span>
+                              </span>
+                            </el-tooltip>
+                          </div>
+                          
+                          <template #dropdown>
+                            <el-dropdown-menu>
+                              <el-dropdown-item @click="systemSettings.chatMode = 'standard'; autoSaveSettings()">
+                                <i class="fa-solid fa-bolt" style="margin-right: 6px;"></i>
+                                {{ t('chatUIStandard') || '经典模式' }}
+                              </el-dropdown-item>
+                              <el-dropdown-item @click="systemSettings.chatMode = 'entertainment'; autoSaveSettings()">
+                                <i class="fa-solid fa-face-smile" style="margin-right: 6px;"></i>
+                                {{ t('chatUIEntertainment') || '娱乐模式' }}
+                              </el-dropdown-item>
+                              <el-dropdown-item @click="systemSettings.chatMode = 'work'; autoSaveSettings()">
+                                <i class="fa-solid fa-gem" style="margin-right: 6px;"></i>
+                                {{ t('chatUIWork') || '办公模式' }}
+                              </el-dropdown-item>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
 
                         <!-- ✨ 3. 将原有的桌面端状态胶囊包裹在一个 template 中，并在这里加 !isMobile 限制 -->
                         <template  v-if="!isAssistantMode && !isMobile">
