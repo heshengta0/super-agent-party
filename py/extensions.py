@@ -120,55 +120,41 @@ def find_root_dir(temp_path: Path) -> Path:
     return temp_path
 
 
-def get_github_url(url: str) -> Optional[str]:
-    """提取 GitHub 官方直连下载链接（使用不限分支名的 HEAD.zip）"""
-    url = url.strip().rstrip('/').removesuffix('.git')
-    parsed = urlparse(url)
+def parse_repo_urls(repo_url: str) -> tuple[Optional[str], list[str]]:
+    """
+    解析源仓库链接，统一默认将极狐 GitLab 作为对应的 GitHub 镜像备份 [1]。
+    忽略配置文件中声明的第三方备用地址，强制全线闭环管理 [1]。
+    """
+    repo_url = repo_url.strip().rstrip('/').removesuffix('.git')
+    parsed = urlparse(repo_url)
     path_parts = parsed.path.strip('/').split('/')
+    
+    github_url = None
+    jihulab_urls = []
+    
     if 'github.com' in parsed.netloc.lower() and len(path_parts) >= 2:
         owner, repo = path_parts[0], path_parts[1]
-        return f"https://github.com/{owner}/{repo}/archive/HEAD.zip"
-    return None
-
-
-def get_backup_urls(main_url: str, backup_url: str = "") -> List[str]:
-    """
-    获取备用下载链接。
-    若主库为 GitHub 且未指定备用库，则自动将其转换为极狐 GitLab 的标准下载直链 [1]。
-    """
-    main_url = main_url.strip().rstrip('/').removesuffix('.git')
-    parsed_main = urlparse(main_url)
-    main_parts = parsed_main.path.strip('/').split('/')
-    
-    urls = []
-    
-    # 1. 如果指定了显式备用链接
-    explicit_backup = backup_url.strip().rstrip('/').removesuffix('.git') if backup_url else ""
-    if explicit_backup:
-        parsed_backup = urlparse(explicit_backup)
-        backup_parts = parsed_backup.path.strip('/').split('/')
-        if len(backup_parts) >= 2:
-            b_owner, b_repo = backup_parts[0], backup_parts[1]
-            b_host = parsed_backup.netloc.lower()
-            if 'jihulab.com' in b_host:
-                urls.append(f"https://jihulab.com/{b_owner}/{b_repo}/-/archive/main/{b_repo}-main.zip")
-                urls.append(f"https://jihulab.com/{b_owner}/{b_repo}/-/archive/master/{b_repo}-master.zip")
-            else:
-                urls.append(f"{explicit_backup}/archive/refs/heads/main.zip")
-                urls.append(f"{explicit_backup}/archive/refs/heads/master.zip")
-                
-    # 2. 如果主库是 GitHub 且未提供显式备用链接，自动将其转换为极狐 GitLab 备用链接 [1]
-    elif 'github.com' in parsed_main.netloc.lower() and len(main_parts) >= 2:
-        owner, repo = main_parts[0], main_parts[1]
-        urls.append(f"https://jihulab.com/{owner}/{repo}/-/archive/main/{repo}-main.zip")
-        urls.append(f"https://jihulab.com/{owner}/{repo}/-/archive/master/{repo}-master.zip")
+        github_url = f"https://github.com/{owner}/{repo}/archive/HEAD.zip"
         
-    # 3. 兜底通用备份路径
-    if not urls:
-        urls.append(f"{main_url}/archive/refs/heads/main.zip")
-        urls.append(f"{main_url}/archive/refs/heads/master.zip")
+        # 默认生成极狐 GitLab 备份直链，包含 main 和 master 两种常见主分支分支名 [1]
+        jihulab_urls = [
+            f"https://jihulab.com/{owner}/{repo}/-/archive/main/{repo}-main.zip",
+            f"https://jihulab.com/{owner}/{repo}/-/archive/master/{repo}-master.zip"
+        ]
+    elif 'jihulab.com' in parsed.netloc.lower() and len(path_parts) >= 2:
+        owner, repo = path_parts[0], path_parts[1]
+        jihulab_urls = [
+            f"https://jihulab.com/{owner}/{repo}/-/archive/main/{repo}-main.zip",
+            f"https://jihulab.com/{owner}/{repo}/-/archive/master/{repo}-master.zip"
+        ]
+    else:
+        # 其他类型仓库兜底
+        jihulab_urls = [
+            f"{repo_url}/archive/refs/heads/main.zip",
+            f"{repo_url}/archive/refs/heads/master.zip"
+        ]
         
-    return urls
+    return github_url, jihulab_urls
 
 
 # ==================== 安装任务管理 ====================
@@ -254,8 +240,8 @@ def _run_bg_install(repo_url: str, ext_id: str, backup_url: str = ""):
         
         update_task_status(ext_id, "installing", "检测网络环境...", 10)
         
-        github_url = get_github_url(repo_url)
-        backup_urls = get_backup_urls(repo_url, backup_url)
+        # 强制默认使用极狐 GitLab 同名镜像替换第三方备用地址 [1]
+        github_url, jihulab_urls = parse_repo_urls(repo_url)
         
         urls = []
         github_connected = False
@@ -271,13 +257,13 @@ def _run_bg_install(repo_url: str, ext_id: str, backup_url: str = ""):
         
         # 根据连通性动态排列下载源顺序 [1]
         if github_connected:
-            # 连通时：GitHub 优先，极狐 GitLab 备用 [1]
+            # 连通时：GitHub 优先，极狐 GitLab 同名备份源备用 [1]
             if github_url:
                 urls.append(github_url)
-            urls.extend(backup_urls)
+            urls.extend(jihulab_urls)
         else:
             # 阻塞时：极狐 GitLab 优先，GitHub 直连在最后尝试 [1]
-            urls.extend(backup_urls)
+            urls.extend(jihulab_urls)
             if github_url:
                 urls.append(github_url)
         
@@ -433,7 +419,7 @@ async def delete_extension(ext_id: str):
 
 @router.post("/install-from-github", response_model=InstallResponse)
 async def install_from_github(req: GitHubInstallRequest, background: BackgroundTasks):
-    """从 GitHub/极狐 GitLab 安装扩展（动态网络测速分发）"""
+    """从 GitHub/极狐 GitLab 安装扩展（动态网络测速分发，不依赖额外的备用仓库地址）"""
     try:
         ext_id = get_ext_id_from_url(req.url)
     except ValueError as e:
@@ -448,7 +434,8 @@ async def install_from_github(req: GitHubInstallRequest, background: BackgroundT
     if ext_id in install_tasks and install_tasks[ext_id]["status"] == "installing":
         return InstallResponse(ext_id=ext_id, status="installing", message="安装任务已在进行中")
     
-    background.add_task(_run_bg_install, req.url, ext_id, req.backupUrl or "")
+    # 统一屏蔽入参传入的 backupUrl，交由 parse_repo_urls 进行统一极狐 GitLab 闭环映射 [1]
+    background.add_task(_run_bg_install, req.url, ext_id, "")
     return InstallResponse(ext_id=ext_id, status="installing", message="后台安装任务已启动")
 
 
@@ -495,7 +482,7 @@ async def upload_zip(file: UploadFile = File(...), background: BackgroundTasks =
 
 @router.put("/{ext_id}/update")
 def update_extension(ext_id: str):
-    """更新扩展（智能连通性测速 + 备用路由）"""
+    """更新扩展（智能连通性测速 + 极狐 GitLab 默认镜像映射）"""
     target = Path(EXT_DIR) / ext_id
     if not target.exists():
         raise HTTPException(status_code=404, detail="扩展未安装")
@@ -507,15 +494,14 @@ def update_extension(ext_id: str):
     try:
         meta = json.loads(pkg_file.read_text(encoding="utf-8"))
         main_repo = meta.get("repository", "").strip()
-        backup_repo = meta.get("backupRepository", "").strip()
     except Exception:
         raise HTTPException(status_code=400, detail="无法解析 package.json")
     
     if not main_repo:
         raise HTTPException(status_code=400, detail="缺少 repository 信息")
     
-    github_url = get_github_url(main_repo)
-    backup_urls = get_backup_urls(main_repo, backup_repo)
+    # 强制将极狐 GitLab 设定为默认的 GitHub 镜像备用源，忽略外部 backupRepository 字段 [1]
+    github_url, jihulab_urls = parse_repo_urls(main_repo)
     
     urls = []
     github_connected = False
@@ -531,9 +517,9 @@ def update_extension(ext_id: str):
     if github_connected:
         if github_url:
             urls.append(github_url)
-        urls.extend(backup_urls)
+        urls.extend(jihulab_urls)
     else:
-        urls.extend(backup_urls)
+        urls.extend(jihulab_urls)
         if github_url:
             urls.append(github_url)
             
