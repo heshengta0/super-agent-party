@@ -1144,8 +1144,10 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
         keyboard_sequence,
         keyboard_hotkey,
         keyboard_hold,
+        logical_type,
         wait,
-        screenshot
+        screenshot,
+        logical_click,
     )
 
     from py.mode_change import update_workspace_settings
@@ -1255,8 +1257,10 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
         "keyboard_sequence":keyboard_sequence,
         "keyboard_hotkey":keyboard_hotkey,
         "keyboard_hold":keyboard_hold,
+        "logical_type":logical_type,
         "wait":wait,
         "screenshot":screenshot,
+        "logical_click":logical_click,
 
         "update_workspace_settings":update_workspace_settings,
         "acpx_agent":acpx_agent,
@@ -6651,8 +6655,10 @@ async def execute_tool_manually(request: Request):
         keyboard_sequence,
         keyboard_hotkey,
         keyboard_hold,
+        logical_type,
         wait,
-        screenshot
+        screenshot,
+        logical_click,
     )
 
     from py.mode_change import update_workspace_settings
@@ -6762,8 +6768,10 @@ async def execute_tool_manually(request: Request):
         "keyboard_sequence":keyboard_sequence,
         "keyboard_hotkey":keyboard_hotkey,
         "keyboard_hold":keyboard_hold,
+        "logical_type":logical_type,
         "wait":wait,
         "screenshot":screenshot,
+        "logical_click":logical_click,
 
         "update_workspace_settings":update_workspace_settings,
         "acpx_agent":acpx_agent,

@@ -184,7 +184,7 @@ async def mouse_hold(button: str, duration: float) -> str:
 
 @require_gui
 async def copy_to_input_box(text: str) -> str:
-    """输入文本"""
+    """输入文本 (优化版：解决偶发性只输入字符 'v' 的 Bug)"""
     def _type_text():
         old_clipboard = ""
         try:
@@ -205,10 +205,14 @@ async def copy_to_input_box(text: str) -> str:
                 time.sleep(0.1)
                 pyperclip.copy(text)
             
-            if sys_os == "Darwin":
-                with pyautogui.hold('command'): pyautogui.press('v')
-            else:
-                with pyautogui.hold('ctrl'): pyautogui.press('v')
+            modifier = 'command' if sys_os == "Darwin" else 'ctrl'
+            
+            # 🌟 修复核心：显式按下修饰键并等待，确保操作系统队列 100% 确认 Ctrl/Cmd 处于被按住状态 🌟
+            pyautogui.keyDown(modifier)
+            time.sleep(0.05)  # 50 毫秒的系统缓冲延迟，彻底阻断输入法或系统抢跑
+            pyautogui.press('v')
+            time.sleep(0.05)  # 释放前的短暂等待
+            pyautogui.keyUp(modifier)
             
             time.sleep(0.15)
         finally:
@@ -222,7 +226,6 @@ async def copy_to_input_box(text: str) -> str:
 
     await asyncio.to_thread(_type_text)
     return f"已复制文本到输入框：'{text}'"
-
 
 @require_gui
 async def keyboard_press(key: str, presses: int = 1) -> str:
@@ -300,6 +303,158 @@ async def keyboard_hold(keys: List[str], duration: float) -> str:
     await asyncio.to_thread(_hold_logic)
     return f"已成功长按组合键 {keys} 持续 {duration} 秒。"
 
+
+@require_gui
+async def logical_click(id: int) -> str:
+    """通过 UI 树节点 ID 执行无障碍逻辑点击（支持窗口被遮挡及熄屏/锁屏后台操作）"""
+    # 动态引入 UI 树缓存查询方法
+    from py.ui_tree_helper import get_cached_element
+    
+    cached = get_cached_element(id)
+    if not cached:
+        return f"错误：未找到 ID 为 {id} 的有效 UI 元素。页面可能已刷新，请重新获取截图后再试。"
+        
+    system, handle = cached
+    
+    try:
+        if system == "Windows":
+            def _win_click():
+                # 尝试一：标准 Invoke 动作 (对应大多数 Button 按钮)
+                try:
+                    pattern = handle.GetInvokePattern()
+                    if pattern:
+                        pattern.Invoke()
+                        return True
+                except Exception:
+                    pass
+                
+                # 尝试二：Toggle 动作 (对应复选框 Checkbox/单选框 Radio)
+                try:
+                    pattern = handle.GetTogglePattern()
+                    if pattern:
+                        pattern.Toggle()
+                        return True
+                except Exception:
+                    pass
+                
+                # 尝试三：SelectionItem 动作 (对应列表项/页签 Tab)
+                try:
+                    pattern = handle.GetSelectionItemPattern()
+                    if pattern:
+                        pattern.Select()
+                        return True
+                except Exception:
+                    pass
+                
+                # 尝试四：模拟无障碍点击 (不移动物理鼠标)
+                try:
+                    handle.Click(simulateMove=True)
+                    return True
+                except Exception:
+                    pass
+                
+                raise Exception("当前 Windows UIA 节点不支持任何已知的无障碍点击动作。")
+                
+            await asyncio.to_thread(_win_click)
+            return f"已成功通过 Windows UIA 模式对节点 ID {id} 执行后台逻辑点击。[LAST_ACTION: LOGICAL_CLICK({id})]"
+            
+        elif system == "Darwin":
+            import ApplicationServices as AX
+            
+            def _mac_click():
+                # 尝试一：AXPress (macOS 标准按钮按下动作)
+                err = AX.AXUIElementPerformAction(handle, "AXPress")
+                if err == 0:
+                    return True
+                
+                # 尝试二：AXPick (菜单弹出项选择动作)
+                err = AX.AXUIElementPerformAction(handle, "AXPick")
+                if err == 0:
+                    return True
+                
+                # 尝试三：AXShowMenu (触发右键/下拉菜单动作)
+                err = AX.AXUIElementPerformAction(handle, "AXShowMenu")
+                if err == 0:
+                    return True
+                
+                raise Exception(f"AXUIElementPerformAction 返回无障碍错误码: {err}")
+                
+            await asyncio.to_thread(_mac_click)
+            return f"已成功通过 macOS AXPress 模式对节点 ID {id} 执行后台逻辑点击。[LAST_ACTION: LOGICAL_CLICK({id})]"
+            
+        elif system == "Linux":
+            import pyatspi
+            
+            def _linux_click():
+                action = handle.queryAction()
+                if action and action.nActions > 0:
+                    # 默认执行该节点的第一个关联行为（通常为点击/激活）
+                    action.doAction(0)
+                    return True
+                raise Exception("当前 Linux AT-SPI 节点不具备动作接口。")
+                
+            await asyncio.to_thread(_linux_click)
+            return f"已成功通过 Linux AT-SPI 模式对节点 ID {id} 执行后台逻辑点击。[LAST_ACTION: LOGICAL_CLICK({id})]"
+            
+        else:
+            return f"未知的操作系统类型 {system}。"
+            
+    except Exception as e:
+        # 当无障碍接口调用遇到应用不配合等死角时，提示 AI 退化执行物理鼠标点击
+        return f"逻辑点击 ID {id} 失败（原因: {str(e)}）。建议立刻使用原物理工具 mouse_click 传入该节点的 center 坐标进行兜底点击。"
+
+
+@require_gui
+async def logical_type(id: int, text: str) -> str:
+    """通过无障碍节点 ID 在后台输入文本（无需物理移动鼠标或使用剪贴板，支持锁屏和后台输入）"""
+    from py.ui_tree_helper import get_cached_element
+    cached = get_cached_element(id)
+    if not cached:
+        return f"错误：未找到 ID 为 {id} 的有效输入框。页面可能已刷新，请重新截图。"
+        
+    system, handle = cached
+    try:
+        if system == "Windows":
+            def _win_type():
+                # 尝试一：UIA ValuePattern (最标准的输入框赋值方法)
+                try:
+                    pattern = handle.GetValuePattern()
+                    if pattern:
+                        pattern.SetValue(text)
+                        return True
+                except Exception:
+                    pass
+                # 尝试二：LegacyIAccessiblePattern 赋值
+                try:
+                    pattern = handle.GetLegacyIAccessiblePattern()
+                    if pattern:
+                        pattern.SetValue(text)
+                        return True
+                except Exception:
+                    pass
+                raise Exception("该组件不支持 Windows UIA Value 赋值模式。")
+                
+            await asyncio.to_thread(_win_type)
+            return f"已成功通过 Windows UIA 后台向输入框 ID {id} 输入文本：'{text}'"
+            
+        elif system == "Darwin":
+            import ApplicationServices as AX
+            
+            def _mac_type():
+                # macOS 底层魔法：直接通过系统无障碍接口重写该节点的 AXValue 属性
+                err = AX.AXUIElementSetAttributeValue(handle, "AXValue", text)
+                if err == 0:
+                    return True
+                raise Exception(f"macOS AXValue 写入失败，无障碍错误码: {err}")
+                
+            await asyncio.to_thread(_mac_type)
+            return f"已成功通过 macOS AXValue 后台向输入框 ID {id} 输入文本：'{text}'"
+            
+        else:
+            return f"暂时不支持该系统平台后台逻辑输入。"
+    except Exception as e:
+        # 退化机制：如果逻辑输入失败，提示 AI 采用物理点击该输入框 + 粘贴的传统方式
+        return f"后台逻辑输入失败（原因：{str(e)}）。请尝试先点击目标输入框，再调用 copy_to_input_box 粘贴输入。"
 
 # 注意：wait 不需要 GUI，所以【不要】加 @require_gui
 async def wait(seconds: float) -> str:
@@ -548,6 +703,48 @@ screenshot_tool = {
     }
 }
 
+# 逻辑点击的工具配置声明
+logical_click_tool = {
+    "type": "function",
+    "function": {
+        "name": "logical_click",
+        "description": "通过当前网页/窗口 UI 树的节点 ID 在后台执行逻辑点击（无障碍点击），不需要物理移动鼠标，支持窗口遮挡和熄屏操作。如果你能拿到有效的节点 ID，请优先使用此工具代替物理鼠标点击。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer", 
+                    "description": "要点击的 UI 元素的 ID（对应当前 UI 树 JSON 中提供的 id 字段）。"
+                }
+            },
+            "required": ["id"]
+        }
+    }
+}
+
+
+logical_type_tool = {
+    "type": "function",
+    "function": {
+        "name": "logical_type",
+        "description": "通过当前网页/窗口 UI 树的节点 ID 在后台向输入框直接输入文本（无障碍输入），不需要物理移动鼠标，支持窗口遮挡和熄屏操作。如果你能拿到有效的输入框节点 ID，请优先使用此工具代替 copy_to_input_box 输入文字。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer", 
+                    "description": "要输入文本的输入框或文本域元素的 ID（对应当前 UI 树 JSON 中提供的 id 字段）。"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "需要输入的具体文本内容。"
+                }
+            },
+            "required": ["id", "text"]
+        }
+    }
+}
+
 # 导出所有工具到列表，方便主程序统一挂载
 computer_use_tools = [
     wait_tool
@@ -565,6 +762,7 @@ mouse_use_tools = [
     mouse_drag_tool,
     mouse_scroll_tool,
     mouse_hold_tool,
+    logical_click_tool,
 ]
 
 keyboard_use_tools = [
@@ -573,4 +771,5 @@ keyboard_use_tools = [
     keyboard_sequence_tool,
     keyboard_hotkey_tool,
     keyboard_hold_tool,
+    logical_type_tool,
 ]
