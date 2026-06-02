@@ -349,6 +349,8 @@ We extend our gratitude to all contributors of the third-party libraries and com
 ### Tips Welcome!
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/agentparty)
 
+[![爱发电](https://img.shields.io/badge/爱发电-支持我们-946ce6?style=for-the-badge&logo=affine&logoColor=white)](https://afdian.com/a/agentparty)
+
 ### Follow us
 <div align="center">
   <a href="https://space.bilibili.com/26978344">

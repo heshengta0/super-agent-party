@@ -352,6 +352,7 @@ docker-compose -f docker-compose-acr.yml up -d
 ### 求打赏！
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/agentparty)
 
+[![爱发电](https://img.shields.io/badge/爱发电-支持我们-946ce6?style=for-the-badge&logo=affine&logoColor=white)](https://afdian.com/a/agentparty)
 
 ### 关注我们
 <div align="center">
