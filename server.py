@@ -2196,6 +2196,9 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
                 if request.is_app_bot and request.platform:
                     task_platform_message = f"\n\n使用create_subtask工具时请将platforms参数设置为[{request.platform}]，从而将子任务的结果及时发给用户。\n\n"
                     content_append(request.messages, 'system', task_platform_message)
+                else:
+                    task_platform_message = f"\n\n使用create_subtask工具时请将platforms参数设置为['chat']，从而将子任务的结果及时发给用户本地客户端。\n\n"
+                    content_append(request.messages, 'system', task_platform_message)
             else:
                 permission_message = "你当前处于执行模式，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
                 content_append(request.messages, 'system', permission_message)

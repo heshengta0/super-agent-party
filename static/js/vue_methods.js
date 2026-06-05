@@ -2042,11 +2042,16 @@ let vue_methods = {
           }
           if (this.activeMenu === 'home') this.startDriverGuide();
         } 
-          // 在 initWebSocket() 的 onmessage 逻辑中添加
-          else if (data.type === 'task_notification') {
-              // 调用前端的弹窗提醒
-              showNotification(`${data.data.title}\n${this.t('intask')}`, 'success');
-          }
+        else if (data.type === 'task_notification') {
+            // 1. 调用前端的弹窗提醒 (保持原有逻辑)
+            showNotification(`${data.data.title}\n${this.t('intask')}`, 'success');
+            
+            // 2. 核心改进：触发 runBehavior，让网页端发起对话总结
+            if (data.data.behavior) {
+                // 这里确保 this 指向正确，如果在箭头函数中直接用 this，否则用外层保存的_this/that
+                this.runBehavior(data.data.behavior);
+            }
+        }
         else if (data.type === 'settings_saved') {
           if (!data.success) {
             showNotification(this.t('settings_save_failed'), 'error');

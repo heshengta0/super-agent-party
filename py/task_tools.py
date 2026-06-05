@@ -24,7 +24,7 @@ create_subtask_tool = {
                     "type": "array",
                     "items": {
                         "type": "string",
-                        "enum": ["wechat", "feishu", "dingtalk", "telegram", "discord", "slack", "wecom"]
+                        "enum": ["chat", "wechat", "feishu", "dingtalk", "telegram", "discord", "slack", "wecom"]
                     },
                     "description": "如果希望在任务完成后主动推送到聊天软件，请在此处指定",
                     "default": []

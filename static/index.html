@@ -2589,7 +2589,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                         class="full-width-input"
                         :placeholder="t('selectPlatform')"
                       >
-                        <!-- 这里不放 chat 选项，JS 逻辑会自动处理它 -->
+                        <el-option :label="t('chatInterface')" value="chat"></el-option>
                         <el-option :label="t('wechatBot')" value="wechat"></el-option>
                         <el-option :label="t('feishuBot')" value="feishu"></el-option>
                         <el-option :label="t('dingtalkBot')" value="dingtalk"></el-option>

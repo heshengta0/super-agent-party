@@ -162,22 +162,34 @@ class SubAgentExecutor:
         )
 
         # 5. 多渠道推送逻辑
-        target_platforms = task.platforms if task.platforms else ["chat"]
-        
-        # A. 始终推送到网页端 (WebSocket)
-        print(f"[TaskExecutor] 正在广播任务完成信号到网页端: {task.title}")
-        await ws_manager.broadcast({
-            "type": "task_notification",
-            "data": {
-                "title": f"Task completed: {task.title}",
-                "message": result[:150] + ("..." if len(result) > 150 else ""),
-                "task_id": task_id
-            }
-        })
+        target_platforms = task.platforms if task.platforms else []
 
         # B. 推送到外部平台 (Wechat, Feishu, etc.)
         for platform in target_platforms:
-            if platform == "chat": continue
+            if platform == "chat":
+                print(f"[TaskExecutor] 正在广播任务完成信号到网页端并触发自动对话: {task.title}")
+                
+                # 跟发给其他平台一样的 prompt 内容
+                chat_prompt = f"【自主任务汇报】\n任务名称：{task.title}\n任务ID：{task_id}\n\n执行结果：\n{result}\n\n请你作为助手，对上述任务结果进行简要总结并回复给用户。"
+                
+                await ws_manager.broadcast({
+                    "type": "task_notification",
+                    "data": {
+                        "title": f"Task completed: {task.title}",
+                        "message": result[:150] + ("..." if len(result) > 150 else ""),
+                        "task_id": task_id,
+                        # 这里构造与前端 runBehavior 匹配的数据结构
+                        "behavior": {
+                            "enabled": True,
+                            "action": {
+                                "type": "prompt",
+                                "prompt": chat_prompt
+                            }
+                        }
+                    }
+                })
+                continue
+
 
             handler = global_behavior_engine.handlers.get(platform)
             if not handler:
