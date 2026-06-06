@@ -1,6 +1,10 @@
+import logging
 from fastapi import APIRouter, Body, HTTPException
 from typing import Dict, Any
 from py.affection_system import load_affection_data, save_affection_data
+
+# 配置日志记录器
+logger = logging.getLogger(__name__)
 
 # 创建羁绊系统的数据路由
 router = APIRouter(prefix="/api/affection", tags=["Affection System"])
@@ -15,7 +19,8 @@ async def get_affection_data_api():
         data = await load_affection_data()
         return data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取羁绊数据失败: {str(e)}")
+        logger.error(f"Error fetching affection data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/save_data")
 async def save_affection_data_api(data: Dict[str, Any] = Body(...)):
@@ -27,4 +32,5 @@ async def save_affection_data_api(data: Dict[str, Any] = Body(...)):
         await save_affection_data(data)
         return {"status": "success", "message": "羁绊数据保存成功"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存羁绊数据失败: {str(e)}")
+        logger.error(f"Error saving affection data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
