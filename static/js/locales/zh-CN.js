@@ -1727,6 +1727,6 @@ key3`,
         'chatUIWorkNotice': '办公模式界面，专注于效率和简洁',
         'use': '使用',
         'startConversation': '开始对话',
-        "githubProxyLabel": "GitHub 仓库代理",
+        "githubProxyLabel": "GitHub 仓库代理 (影响到扩展的安装)",
         "githubProxyPlaceholder": "请输入您的 GitHub 代理/反代前缀 (支持以 http/https 开头的地址，留空直连)",
     }

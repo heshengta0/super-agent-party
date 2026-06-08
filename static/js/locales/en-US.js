@@ -1724,6 +1724,6 @@ Key3`,
         'chatUIWorkNotice': 'Office mode interface, focused on efficiency and simplicity',
         'use': 'Use',
         'startConversation': 'Start a conversation',
-        "githubProxyLabel": "GitHub Repository Proxy",
+        "githubProxyLabel": "GitHub Repository Proxy (Affects Extension Installation)",
         "githubProxyPlaceholder": "Please enter your GitHub proxy/reverse proxy prefix (supports addresses starting with http/https, leave blank for direct connection)",
     }
