@@ -36,6 +36,9 @@
 
 ### 🚀 **一款拥有无限可能的AI桌面伴侣！**
 
+#### 高自由聊天界面：经典模式、娱乐模式、办公模式，支持替换背景图片，结合实时语音聊天和表情包库，让聊天更加沉浸
+![image](doc/image/img-1/chat.jpeg)
+
 #### 桌面伴侣：支持自定义VRM模型、动作、3D场景，并支持[live2D扩展](https://github.com/heshengtao/sap-live2d)
 ![image](doc/image/img-1/cover.jpeg)
 

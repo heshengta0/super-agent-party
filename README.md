@@ -37,6 +37,9 @@
 
 ### 🚀 **An AI desktop companion with endless possibilities!**  
 
+#### High-Freedom Chat Interface: Classic Mode, Entertainment Mode, Office Mode, supports background image replacement, combined with real-time voice chat and emoji library, making chatting more immersive
+![image](doc/image/img-2/chat.jpeg)
+
 #### Desktop Companion: Supports custom VRM models, actions, 3D scenes, and is compatible with [live2D extensions](https://github.com/heshengtao/sap-live2d)
 ![image](doc/image/img-2/cover.jpeg)
 
