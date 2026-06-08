@@ -52,6 +52,9 @@
 #### Computer Control: Through desktop vision combined with a toolchain for controlling the mouse, keyboard, and terminal, AI agents can accomplish any task on a computer! The image below shows an AI playing Wordle.
 ![image](doc/image/img-2/vision.jpeg)
 
+#### Multiple Window Modes: The chat interface supports phone-sized and capsule-sized docking on the desktop
+![image](doc/image/img-1/window.jpeg)
+
 #### Multi-Role Group Chat: Supports tavern character cards and long-term memory, allowing you to chat with multiple characters simultaneously!
 ![image](doc/image/img-2/group.jpeg)
 

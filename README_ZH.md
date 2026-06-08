@@ -51,6 +51,9 @@
 #### 电脑控制：通过桌面视觉加上对鼠标、键盘、终端三方面的控制工具链，让AI智能体可以在电脑上完成任何任务！下图为AI在玩Wordle
 ![image](doc/image/img-1/vision.jpeg)
 
+#### 多种窗口模式：聊天界面支持手机大小、胶囊大小停靠在桌面上
+![image](doc/image/img-1/window.jpeg)
+
 #### 多角色群聊：支持酒馆角色卡，支持长期记忆，你可以同时和多个角色一起聊天！
 ![image](doc/image/img-1/group.jpeg)
 
