@@ -11700,12 +11700,15 @@ code {
 
 /* 2. 定义收起状态 - 拦截 Vue 的 v-show="false" */
 /* 当点击隐藏时，我们用 CSS 截获 display:none，并将其转化为尺寸和透明度的动画 */
+body.has-custom-bg .chat-history-sidebar[style*="display: none"],
 .chat-history-sidebar[style*="display: none"] {
     width: 0 !important;
     min-width: 0 !important;
     opacity: 0 !important;
     border-right-width: 0 !important; /* 去掉边框，防止完全收起时残留一条线 */
-    pointer-events: none; /* 收起后禁止点击穿透 */
+    margin: 0 !important;             /* 强力清除折叠/隐藏状态下的外边距，彻底解决偏右问题 */
+    padding: 0 !important;            /* 清除内边距 */
+    pointer-events: none;             /* 收起后禁止点击穿透 */
 }
 
 /* 3. 防挤压保护：防止收起过程中，内部文字和按钮被挤压换行导致鬼畜闪烁 */
@@ -13470,7 +13473,10 @@ body.has-custom-bg .suite-layout,
 body.has-custom-bg .suite-content,
 body.has-custom-bg .keybox-container,
 body.has-custom-bg .api-container,
-body.has-custom-bg .license-notice {
+body.has-custom-bg .license-notice,
+body.has-custom-bg .ai-browser-container,   
+body.has-custom-bg .browser-welcome-page,   
+body.has-custom-bg .ext-iframe-wrapper {
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
@@ -13485,7 +13491,7 @@ body.has-custom-bg .sidebar {
   border-right: 1px solid rgba(128, 128, 128, 0.15) !important;
 }
 
-/* 扒掉主菜单项自带底色 */
+/* 扒掉菜单项自带底色 */
 body.has-custom-bg .el-menu-vertical,
 body.has-custom-bg .el-menu-item {
   background: transparent !important;
@@ -13496,7 +13502,7 @@ body.has-custom-bg .el-menu-item.is-active {
   background-color: rgba(128, 128, 128, 0.15) !important;
 }
 
-/* 3. 🌟 新增：二级侧边导航栏 (历史对话栏、设置页侧栏) 赋予悬浮大圆角 */
+/* 3. 二级导航与侧边栏 (历史对话栏、设置页侧栏) - 悬浮大圆角 */
 body.has-custom-bg .chat-history-sidebar,
 body.has-custom-bg .suite-sidebar {
   background-color: color-mix(in srgb, var(--el-bg-color-page) 60%, transparent) !important;
@@ -13504,11 +13510,32 @@ body.has-custom-bg .suite-sidebar {
   -webkit-backdrop-filter: blur(25px) saturate(150%);
   border: 1px solid rgba(128, 128, 128, 0.15) !important;
   
-  /* 悬浮圆角处理，剥离屏幕边缘 */
+  /* 悬浮圆角处理 */
   border-radius: 16px !important;
   margin: 12px 0 12px 12px !important;
   height: calc(100% - 24px) !important;
   overflow: hidden !important; 
+}
+
+/* 🌟 3.5 核心修复：浏览器左侧主体卡片化，并强制将网页裁切为 16px 圆角 🌟 */
+body.has-custom-bg .browser-body {
+  background-color: color-mix(in srgb, var(--el-bg-color-page) 50%, transparent) !important;
+  backdrop-filter: blur(25px) saturate(150%);
+  -webkit-backdrop-filter: blur(25px) saturate(150%);
+  border: 1px solid rgba(128, 128, 128, 0.15) !important;
+  
+  /* 悬浮圆角处理：使其像一个卡片浮在背景上 */
+  border-radius: 16px !important;
+  margin: 12px 12px 12px 12px !important; /* 四周预留安全间距 */
+  height: calc(100% - 24px) !important;
+  overflow: hidden !important; /* 关键：强行裁切内部的任何网页为圆角 */
+}
+
+/* 确保 webview 及其包装层也同步继承圆角，消除任何闪烁直角 */
+body.has-custom-bg .webview-wrapper,
+body.has-custom-bg .webview-element {
+  border-radius: 16px !important;
+  overflow: hidden !important;
 }
 
 /* 4. 右侧扩展面板与内页实体卡片 */
@@ -13524,15 +13551,43 @@ body.has-custom-bg .provider-card,
 body.has-custom-bg .tool-item,
 body.has-custom-bg .extension-card,
 body.has-custom-bg .vendor-card,
-body.has-custom-bg .task-card-item .el-card {
-  background-color: color-mix(in srgb, var(--el-bg-color-page) 65%, transparent) !important;
+body.has-custom-bg .task-card-item .el-card,
+body.has-custom-bg .guide-card,
+body.has-custom-bg .fav-icon-box { 
+  background-color: color-mix(in srgb, var(--el-bg-color-page) 60%, transparent) !important;
   backdrop-filter: blur(25px) saturate(150%);
   -webkit-backdrop-filter: blur(25px) saturate(150%);
   border: 1px solid rgba(128, 128, 128, 0.15) !important;
   border-radius: 16px !important;
 }
 
-/* 5. 顶部拖拽栏与底部输入框 */
+/* 4.5 浏览器 Copilot 侧边栏对齐悬浮大圆角 */
+body.has-custom-bg .browser-copilot-sidebar {
+  background-color: color-mix(in srgb, var(--el-bg-color-page) 60%, transparent) !important;
+  backdrop-filter: blur(25px) saturate(150%);
+  -webkit-backdrop-filter: blur(25px) saturate(150%);
+  border: 1px solid rgba(128, 128, 128, 0.15) !important;
+  
+  /* 悬浮圆角处理 */
+  border-radius: 16px !important;
+  margin: 12px 12px 12px 0 !important; 
+  height: calc(100% - 24px) !important;
+  overflow: hidden !important;
+  
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), 
+              margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.25s ease !important;
+}
+
+body.has-custom-bg .browser-copilot-sidebar.sidebar-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  opacity: 0 !important;
+}
+
+/* 5. 顶部栏与大输入框、大搜索框 */
 body.has-custom-bg .top-bar {
   background-color: color-mix(in srgb, var(--el-bg-color-page) 40%, transparent) !important;
   backdrop-filter: blur(20px) saturate(150%);
@@ -13540,14 +13595,48 @@ body.has-custom-bg .top-bar {
   border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important;
 }
 
-body.has-custom-bg .unified-input-wrapper {
+body.has-custom-bg .unified-input-wrapper,
+body.has-custom-bg .hero-input-wrapper,
+body.has-custom-bg .ios-search-wrapper { 
   background-color: color-mix(in srgb, var(--el-bg-color) 65%, transparent) !important;
   backdrop-filter: blur(20px) saturate(150%);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
   border: 1px solid rgba(128, 128, 128, 0.15) !important;
 }
 
-/* 6. 消息操作区彻底透明 (按钮、TTS) */
+body.has-custom-bg .ios-search-input {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* 🌟 核心修复：清除切换引擎按钮的白底，使其与搜索框完全融为一体 🌟 */
+body.has-custom-bg .engine-selector,
+body.has-custom-bg .current-engine {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-right: 1px solid rgba(128, 128, 128, 0.15) !important; /* 半透明精细分割线 */
+}
+
+/* 5.5 模型指示器与状态胶囊玻璃化 */
+body.has-custom-bg .status-pill {
+  background-color: color-mix(in srgb, var(--el-fill-color-light) 50%, transparent) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(128, 128, 128, 0.15) !important;
+}
+
+body.has-custom-bg .engine-dropdown {
+  background-color: color-mix(in srgb, var(--el-bg-color) 75%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(128, 128, 128, 0.2) !important;
+}
+
+body.has-custom-bg .browser-toggle-handle {
+  border-radius: 12px 0 0 12px !important;
+}
+
+/* 6. 消息操作区透明 */
 body.has-custom-bg .message.assistant .tts-controls,
 body.has-custom-bg .message-actions,
 body.has-custom-bg .tts-controls .el-button,
@@ -13562,11 +13651,7 @@ body.has-custom-bg .message-actions .el-button:hover {
   background-color: rgba(128, 128, 128, 0.15) !important;
 }
 
-/* =========================================================
-   7. 聊天气泡处理 (精准打击套娃问题)
-   ========================================================= */
-
-/* 7.1 用户消息：整块毛玻璃，完全不受娱乐模式拆分影响 */
+/* 7. 聊天气泡处理 */
 body.has-custom-bg .user .message-content {
   background-color: color-mix(in srgb, var(--el-color-primary) 70%, transparent) !important;
   backdrop-filter: blur(15px);
@@ -13574,7 +13659,6 @@ body.has-custom-bg .user .message-content {
   border: 1px solid rgba(128, 128, 128, 0.15) !important;
 }
 
-/* 7.2 助手/系统消息（标准/办公模式）：整块毛玻璃 */
 body.has-custom-bg .assistant .message-content:not(.mode-entertainment):not(.mode-work),
 body.has-custom-bg .system .message-content:not(.mode-entertainment):not(.mode-work) {
   background-color: color-mix(in srgb, var(--el-bg-color) 70%, transparent) !important;
@@ -13583,9 +13667,7 @@ body.has-custom-bg .system .message-content:not(.mode-entertainment):not(.mode-w
   border: 1px solid rgba(128, 128, 128, 0.15) !important;
 }
 
-/* 7.3 🌟 娱乐模式 (Entertainment Mode) 核心修复 🌟 */
-
-/* 第一步：扒掉 AI 气泡外壳和所有的 Markdown 中间层的实色与阴影！消灭直角背景 */
+/* 7.3 娱乐模式气泡打碎透射 */
 body.has-custom-bg .assistant .message-content.mode-entertainment,
 body.has-custom-bg .system .message-content.mode-entertainment,
 body.has-custom-bg .mode-entertainment .markdown-body,
@@ -13600,7 +13682,6 @@ body.has-custom-bg .mode-entertainment .stream-content {
   box-shadow: none !important;
 }
 
-/* 第二步：只对最内层的分段气泡 (如 p, pre, ul) 应用毛玻璃效果，使其完美贴合圆角！ */
 body.has-custom-bg .mode-entertainment .stream-content > p,
 body.has-custom-bg .mode-entertainment .stream-content > pre,
 body.has-custom-bg .mode-entertainment .stream-content > ul,
@@ -13632,7 +13713,7 @@ body.has-custom-bg .mode-entertainment .sap-process-block.type-approval {
   border: 1px solid rgba(128, 128, 128, 0.15) !important;
 }
 
-/* 8. 全局护眼叠加层 (保持文字对比度) */
+/* 8. 全局护眼叠加层 */
 body.has-custom-bg::before {
   content: '';
   position: fixed;

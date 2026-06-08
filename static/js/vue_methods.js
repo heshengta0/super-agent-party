@@ -9364,8 +9364,8 @@ handleCreateSlackSeparator(val) {
       }
       await this.autoSaveSettings();
     },
-    /**
-     * 按分隔符 + <voice> 标签 拆分 buffer
+/**
+     * 按分隔符 + <voice> 标签 拆分 buffer (终极防漏、防换行抖动版)
      * @returns {
      *   chunks: string[]        // 纯文本块（已去标签、已清理）
      *   chunks_voice: string[]  // 与 chunks 一一对应的声音 key
@@ -9374,33 +9374,54 @@ handleCreateSlackSeparator(val) {
      * }
      */
     splitTTSBuffer(buffer) {
-        // 0. 基础清理逻辑 (保持不变)
+        // ============================================================
+        // 🌟 核心优化 1：一进来就以最优先级、最彻底地干掉所有的 Markdown 图片
+        // 使用 [\s\S] 替代 . ，防止流式文本中因换行符或特殊格式导致正则匹配失败而残留图片 alt 文本
+        // 这一步运行后，无论是在 <silence> 内部还是外部，"开心" 等 alt 文本都将直接被安全抹除
+        // ============================================================
+        buffer = buffer.replace(/!\[[\s\S]*?\]\([\s\S]*?\)/g, '');
+
+        // 1. 初始化栈和允许的音色列表
+        if (!this.voiceStack) this.voiceStack = ['default'];
+        const voiceKeys = ['default', 'silence', ...Object.keys(this.ttsSettings.newtts || {})].filter(Boolean);
+
+        // ============================================================
+        // 🌟 核心优化 2：意外情况防噪兜底
+        // ============================================================
+        
+        // A. 自动识别未隔离的网页链接/原始 URL，将其无缝包裹在 <silence> 标签中
+        buffer = buffer.replace(/(<silence>[\s\S]*?<\/silence>)|(https?:\/\/[^\s]+?(?=[,.:;!?。，：；？！]*?(?:\s|$)))/gi, (match, silence, url) => {
+            if (silence) return silence; 
+            return `<silence>${url}</silence>`;
+        });
+
+        // B. 清理/静音非音色定义的其他 HTML 标签 (如 <button>, <img ...>)，防止 TTS 念出 HTML 源码
+        const voiceTagsPattern = `\\/?(?:${voiceKeys.join('|')})\\b`;
+        const htmlTagRe = new RegExp(`<(?!(?:${voiceTagsPattern}))[^>]+>`, 'gi');
+        buffer = buffer.replace(htmlTagRe, '');
+
+        // 2. 基础清理逻辑 (此时图片已被彻底过滤，在此处安全清理常规超链接，支持多行 [文本](url))
         buffer = buffer
             .replace(/#{1,6}\s/gm, '')
             .replace(/[*~`]+/g, '')
             .replace(/^\s*[-*]\s/gm, '')
             .replace(/[\u{2600}-\u{27BF}\u{2700}-\u{27BF}\u{1F300}-\u{1F9FF}]/gu, '')
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
-            .replace(/!\[.*?\]\(.*?\)/g, '')
-            .replace(/\[(.*?)\]\(.*?\)/g, '$1');
+            .replace(/\[([\s\S]*?)\]\([\s\S]*?\)/g, '$1'); // 仅提取文本链接的展示文字
 
         if (!buffer) {
             return {
                 chunks: [],
                 chunks_voice: [],
                 remaining: '',
-                remaining_voice: this.voiceStack[this.voiceStack.length - 1] // 返回栈顶
+                remaining_voice: this.voiceStack[this.voiceStack.length - 1]
             };
         }
 
-        // 1. 初始化栈（防御性）
-        if (!this.voiceStack) this.voiceStack = ['default'];
-
-        // 2. 构造正则
+        // 2. 构造正则 (保持原有逻辑不变)
         const separators = (this.ttsSettings.separators || [])
             .map(s => s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r'));
 
-        const voiceKeys = ['default', 'silence', ...Object.keys(this.ttsSettings.newtts || {})].filter(Boolean);
         const openTagRe = new RegExp(`<(${voiceKeys.join('|')})>`, 'gi');
         const closeTagRe = /<\/\w+>/gi; // 匹配任何结束标签
         const sepRe = separators.length
@@ -9431,7 +9452,6 @@ handleCreateSlackSeparator(val) {
             const cleaned = text.replace(/\s+/g, ' ').trim();
             if (cleaned && !/^[\s\p{P}]*$/u.test(cleaned)) {
                 chunks.push(cleaned);
-                // 关键：永远使用当前栈顶的音色
                 chunks_voice.push(this.voiceStack[this.voiceStack.length - 1]);
             }
         };
@@ -9459,7 +9479,6 @@ handleCreateSlackSeparator(val) {
 
         // 5. 剩余文本
         const remaining = buffer.slice(segmentStart);
-        // 告知外部当前处于什么音色状态（栈顶）
         const remaining_voice = this.voiceStack[this.voiceStack.length - 1];
 
         return { chunks, chunks_voice, remaining, remaining_voice };
