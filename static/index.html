@@ -1254,7 +1254,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                     <template v-if="!(systemSettings.chatMode === 'entertainment' && block.type !== 'text' && block.type !== 'approval')">
                                         
                                         <!-- 如果是最后一个块且消息未完成，或者不是工具类块，正常渲染 -->
-                                        <template v-if="(message.displayBlocks.length > 0 && block === message.displayBlocks[message.displayBlocks.length - 1] && !message.generationFinished) || !isToolBlock(block)">
+                                        <template v-if="shouldExpandBlock(message, block, bIndex)">
                                             
                                             <!-- 1. 深度思考块 -->
                                             <div v-if="block.type === 'reasoning'" class="sap-process-block type-reasoning">
@@ -1267,7 +1267,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                                 <template v-for="(segment, sIdx) in (block.segments || [{ type: 'text', content: block.content }])" :key="sIdx">
                                                     <div v-if="segment.type === 'text' && segment.content" 
                                                         class="stream-content" 
-                                                        :class="{ 'streaming': isTyping && index === messages.length - 1 && sIdx === (block.segments || []).length - 1 }" 
+                                                        :class="{ 'streaming': isTyping && index === messages.length - 1 && bIndex === getVisibleBlocks(message).length - 1 && sIdx === (block.segments || []).length - 1 }" 
                                                         v-morph:format="preprocessEntertainmentText(segment.content)" 
                                                         style="display: inline-block; width: 100%;">
                                                     </div>
@@ -17446,7 +17446,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                     <template v-if="!(systemSettings.chatMode === 'entertainment' && block.type !== 'text' && block.type !== 'approval')">
                                         
                                         <!-- 如果是最后一个块且消息未完成，或者不是工具类块，正常渲染 -->
-                                        <template v-if="(message.displayBlocks.length > 0 && block === message.displayBlocks[message.displayBlocks.length - 1] && !message.generationFinished) || !isToolBlock(block)">
+                                        <template v-if="shouldExpandBlock(message, block, bIndex)">
                                             
                                             <!-- 1. 深度思考块 -->
                                             <div v-if="block.type === 'reasoning'" class="sap-process-block type-reasoning">
@@ -17459,7 +17459,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                                 <template v-for="(segment, sIdx) in (block.segments || [{ type: 'text', content: block.content }])" :key="sIdx">
                                                     <div v-if="segment.type === 'text' && segment.content" 
                                                         class="stream-content" 
-                                                        :class="{ 'streaming': isTyping && index === messages.length - 1 && sIdx === (block.segments || []).length - 1 }" 
+                                                        :class="{ 'streaming': isTyping && index === messages.length - 1 && bIndex === getVisibleBlocks(message).length - 1 && sIdx === (block.segments || []).length - 1 }" 
                                                         v-morph:format="preprocessEntertainmentText(segment.content)" 
                                                         style="display: inline-block; width: 100%;">
                                                     </div>

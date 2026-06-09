@@ -158,7 +158,7 @@ async def _get_current_cwd() -> str:
 
 def get_detailed_exit_info(code: int, command: str) -> str:
     """
-    根据退出码和操作系统，生成详细的诊断信息和建议。
+    根据退出码和操作系统，生成详细的诊断信息 and 建议。
     """
     cmd_name = command.strip().split()[0] if command.strip() else "unknown"
     system = platform.system()
@@ -228,7 +228,7 @@ def apply_hashline_edits(file_content: str, edits: list) -> tuple[bool, str, str
             if get_line_hash(lines[expected_idx]) == expected_hash:
                 return expected_idx
                 
-        # 2. 如果不匹配，说明文件可能被插入/删除了行，启动上下滑动窗口搜索
+        # 2. 如果不匹配，说明 file 可能被插入/删除了行，启动上下滑动窗口搜索
         start = max(0, expected_idx - window)
         end = min(len(lines), expected_idx + window + 1)
         
@@ -302,7 +302,7 @@ def apply_hashline_edits(file_content: str, edits: list) -> tuple[bool, str, str
 
 def _apply_patch(content: str, old_string: str, new_string: str) -> tuple[bool, str, str]:
     """
-    高度鲁棒的补丁应用算法，完美解决 AI 换行符幻觉和“空行不断膨胀”的问题。
+    高度鲁棒的补丁应用算法，解决 AI 换行符幻觉和“空行不断膨胀”的问题。
     """
     # 统一换行符为 \n
     content_lf = content.replace('\r\n', '\n')
@@ -1358,27 +1358,53 @@ def resolve_strict_path(cwd: str, sub_path: str, check_symlink: bool = True) -> 
 
 def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tuple[bool, str]:
     """
-    动态路径感知安全校验（彻底封堵绝对路径逃逸通道）
+    动态路径感知安全校验（涵盖工作区自我毁灭、.NET 类型加速器绕过、异步 Job 炸弹等防御）
     """
     cmd_lower = command.lower()
     
     # 获取规范化的工作区绝对路径
     resolved_cwd = str(Path(cwd).resolve()).lower()
     
-    # ==================== [新增] 动态绝对路径逃逸检测 ====================
-    # 匹配 Windows 盘符路径（如 D:\path）或 Unix 绝对路径（如 /path）
-    # 排除掉一些常见命令的参数干扰，专注于提取路径
-    potential_paths = re.findall(r'([a-zA-Z]:[/\\][^\s"\'|&<>]+|/[^\s"\'|&<>]+)', command)
+    # ==================== [改进] 动态绝对路径逃逸检测 ====================
+    # 匹配 Windows 盘符路径（如 D:\path）或 Unix 绝对路径/Windows 根路径（如 /path 或 \path）
+    potential_paths = re.findall(r'([a-zA-Z]:[/\\][^\s"\'|&<>]+|[/\\][^\s"\'|&<>]+)', command)
+    
+    # 敏感 Windows 根目录列表（长度 >= 5），用于区分路径与 Windows 命令行参数（如 /s, /f, /quiet）
+    win_sensitive_dirs = {
+        "windows", "users", "program files", "program files (x86)", 
+        "programdata", "recovery", "system volume information", "boot", "intel"
+    }
+
+    # 允许的系统可执行程序名（避免误判 cmd.exe, powershell.exe 等系统工具本身的路径）
+    allowed_system_exes = {
+        "cmd.exe", "powershell.exe", "pwsh.exe", "bash.exe", "git.exe", 
+        "conhost.exe", "tar.exe", "curl.exe", "ssh.exe", "wsl.exe",
+        "bash", "sh", "git", "curl", "ssh", "tar"
+    }
     
     for raw_path in potential_paths:
+        # Windows 特殊处理：过滤掉命令行参数/开关（如 /s, /f, /q, /quiet 等）
+        if platform.system() == "Windows" and raw_path.startswith('/'):
+            clean_path = raw_path[1:]
+            # 如果不包含其他斜杠/反斜杠，说明是单级路径或参数开关
+            if '/' not in clean_path and '\\' not in clean_path:
+                if clean_path.lower() not in win_sensitive_dirs:
+                    # 认定为普通的参数开关或非敏感目录，予以放行
+                    continue
+
+        # 跨平台驱动器号防护：如果是非 Windows 系统，但路径却包含 Windows 盘符（如 C:\），直接拦截
+        if platform.system() != "Windows" and re.match(r'^[a-zA-Z]:', raw_path):
+            return False, f"Access to path outside workspace is blocked: {raw_path}"
+
         try:
             # 规范化命令中出现的每一个绝对路径
             resolved_target = str(Path(raw_path).resolve()).lower()
             
             # 关键判定：如果该绝对路径不以工作区路径(cwd)开头，说明 AI 试图操作外部文件！
             if not resolved_target.startswith(resolved_cwd):
-                # 排除一些系统级工具路径本身的误判（比如 C:\Windows\System32\cmd.exe）
-                if "system32" in resolved_target or "powershell" in resolved_target:
+                # 排除系统级工具路径本身的误判，确保其确实是允许的系统程序，而非敏感目录
+                target_name = Path(resolved_target).name.lower()
+                if target_name in allowed_system_exes:
                     continue
                 return False, f"Access to path outside workspace is blocked: {raw_path}"
         except Exception:
@@ -1414,8 +1440,17 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
         (r':\(\)\{\s*:\|:&?\s*\};\s*:', "Fork bomb"), 
         (r'(?:\s|^)format\s+[a-z]:', "Windows disk format"),
         (r'(?:\s|^)reg\s+(delete|add)\s+(HKLM|HKEY_LOCAL_MACHINE)', "Modify system registry"),
-        (r'Remove-Item\s+-Recurse\s+-Force\s+[a-z]:[/\\]', "Powershell recursive delete root"),
-        (r'nvram\s+-c', "Clear Mac NVRAM"),
+        (r'(?:\s|^)Remove-Item\s+-Recurse\s+-Force\s+[a-z]:[/\\]', "Powershell recursive delete root"),
+        (r'(?:\s|^)nvram\s+-c', "Clear Mac NVRAM"),
+        
+        # 针对特定漏洞的毁灭性行为防护 (即使 yolo 模式下也强制拦截关键系统服务与进程控制)
+        (r'(?:\s|^)(taskkill|Stop-Process)(?:\.exe)?(?:\s|[/-]).*(?:svchost|lsass|csrss|smss|wininit|services|explorer)\.exe', "System process termination blocked"),
+        (r'(?:\s|^)sc(?:\.exe)?\s+(?:stop|delete|config)\s+(?:wuauserv|WinDefend|SamSs|eventlog)', "Critical service modification blocked"),
+        (r'(?:\s|^)schtasks(?:\.exe)?\s+/(create|change|delete)', "Scheduled tasks modification blocked"),
+
+        # [新增] 防止工作区自我毁灭 (阻止对工作区根目录进行递归清空操作)
+        (r'(?:\s|^)(?:rm|remove-item|del|rd|rmdir)(?:\.exe)?\s+-[rRfFsS\s\-]*\s*(?:\*|\.)', "Workspace self-destruction blocked"),
+        (r'remove-item\s+.*-recurse\s+.*(?:\*|\.)', "Workspace self-destruction blocked"),
     ]
     
     for pattern, reason in destructive_patterns:
@@ -1432,6 +1467,25 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
             (r'~\s*/', "Home directory access via ~"),
             (r'(?:\s|^)osascript\s+-e\s+.*password', "AppleScript password prompt blocked"),
             (r'(Invoke-WebRequest|iwr|Invoke-RestMethod|irm).*\|\s*(Invoke-Expression|iex)', "PowerShell remote script execution"),
+            
+            # [改进] 动态执行、混淆与 .NET 类型/加速器（如 [IO.File]）绕过防御
+            (r'(?:\s|^|\|)\s*(iex|Invoke-Expression)(?:\s|[/-]|$)', "PowerShell Invoke-Expression blocked"),
+            (r'\[(?:char|byte)\]\s*\d+', "PowerShell Char-Code obfuscation blocked"),
+            (r'\[(?:System\.)?(?:IO|Environment|Diagnostics|Security|Net|DirectoryServices|Management|Reflection|Runtime|ServiceProcess|Convert|Console|Threading|Web)[\.a-zA-Z0-9_]*\]::', ".NET static methods blocked"),
+            (r'\$\{?env:(?:WINDIR|SYSTEMROOT|SYSTEMDRIVE|PROGRAMDATA|PROGRAMFILES|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP)\}?', "Sensitive environment variable access blocked"),
+            
+            # [新增] 异步 Job 耗尽/分叉炸弹防御
+            (r'(?:\s|^|\|)\s*(Start-Job|Start-ThreadJob)\b', "Asynchronous job creation blocked"),
+            (r'\s+-AsJob\b', "Asynchronous job parameter blocked"),
+            (r'ForEach-Object\s+-[Pa-z]*\s*Parallel', "Parallel loop execution blocked"),
+
+            # [新增] 基础资源超载/递归炸弹规避
+            (r'\*\s*(?:\d{3,}MB|\d+GB|\d{8,})', "Large memory allocation multiplication blocked"),
+            (r'function\s+([a-zA-Z0-9_-]+)\s*\{\s*\1\s*\}', "Simple recursion fork bomb blocked"),
+
+            # [改进] 进程与服务控制 (普通进程也拦截，除非 yolo)
+            (r'(?:\s|^)(taskkill(?:\.exe)?|Stop-Process|Stop-Service|sc(?:\.exe)?\s+stop|sc(?:\.exe)?\s+delete|net(?:\.exe)?\s+stop)(?:\s|[/-]|$)', "Process/Service termination blocked"),
+            (r'(?:powershell|pwsh).*(?:-encodedcommand|-enc\s|-e\s)', "PowerShell encoded command execution blocked"),
         ]
         for pattern, reason in risk_patterns:
             if re.search(pattern, command, re.IGNORECASE):
@@ -1847,7 +1901,7 @@ async def glob_files_tool_local(pattern: str, exclude: str = "") -> str:
             if not p.is_file():
                 continue
 
-            # 计算相对路径，用于后续匹配和输出
+            # 计算相对路径，用于后续匹配 and 输出
             try:
                 rel = p.relative_to(base)
             except ValueError:

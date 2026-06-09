@@ -3730,18 +3730,40 @@ formatMessage(content, index) {
     },
 
 
-    isLastActiveBlock(msg, blockIndex) {
-        if (!msg.displayBlocks || msg.displayBlocks.length === 0) return false;
-        const lastBlock = msg.displayBlocks[msg.displayBlocks.length - 1];
-        // 只要该块是最后一个，并且消息还没生成完，就认为是“正在更新的块”
-        if (!msg.generationFinished && blockIndex === msg.displayBlocks.length - 1) {
+    // 1. 判断显示块是否处于活跃状态（正在输出、正在执行或处于等待中）
+    isBlockActive(msg, block, blockIndex) {
+        // 如果整条消息已经生成并结束，则没有任何块处于活跃状态
+        if (msg.generationFinished) return false;
+
+        // 【维度一：显式状态判定】（推荐在流式解析更新 block 时使用）
+        // 如果你在更新 displayBlocks 的方法中，给当前正在写入的 block 赋予了活跃标记：
+        if (block.active || block.isStreaming || block.status === 'running') {
             return true;
         }
-        // 如果已经生成完，最后一块也当作静态块，不再实时展开
-        return false;
+
+        // 【维度二：位置退级判定】（默认兜底）
+        // 在标准的单路流式输出中，最新、且正在接收流式数据的块，必然是 displayBlocks 中的最后一个元素
+        const isLast = msg.displayBlocks && (blockIndex === msg.displayBlocks.length - 1);
+        
+        return isLast;
     },
 
-    // 判断是否为工具类块
+    // 2. 统一控制哪些块应该展开，哪些块应该折叠
+    shouldExpandBlock(msg, block, blockIndex) {
+        // 1. 文本块、审批块、错误块：为保证阅读连贯性，默认始终保持展开
+        if (block.type === 'text' || block.type === 'approval' || block.type === 'error') {
+            return true;
+        }
+
+        // 2. 工具类、思考类块：仅在当前处于活跃状态时展开，完成后自动折叠
+        if (this.isToolBlock(block)) {
+            return this.isBlockActive(msg, block, blockIndex);
+        }
+
+        return true;
+    },
+
+    // 3. 判断是否为工具类块
     isToolBlock(block) {
         return block.type === 'tool_call' || block.type === 'tool_result' || block.type === 'reasoning';
     },
