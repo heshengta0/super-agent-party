@@ -8,18 +8,10 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, UploadFile, File
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 import os
 import asyncio
 import time
-import re
-import platform
-
-# 动态加载 Windows 特有模块，防止在非 Windows 平台开发部署时崩溃
-is_windows = platform.system() == "Windows"
-if is_windows:
-    import ctypes
-    from ctypes import wintypes
 
 from py.get_setting import EXT_DIR
 from py.node_runner import node_mgr
@@ -61,139 +53,7 @@ class TaskStatusResponse(BaseModel):
     timestamp: Optional[float] = None
 
 
-# 用于命令行安全校验的 Pydantic 模型
-class CommandValidationRequest(BaseModel):
-    command: str
-
-
-class CommandValidationResponse(BaseModel):
-    safe: bool
-    message: str
-
-
 # ==================== 工具函数 ====================
-
-def parse_windows_command(cmd_line: str) -> List[str]:
-    """
-    使用 Windows API 解析命令行参数，防止通过引号、转义字符等技巧绕过。
-    非 Windows 环境下会安全回退到 shlex 分词。
-    """
-    if is_windows:
-        try:
-            shell32 = ctypes.windll.shell32
-            shell32.CommandLineToArgvW.restype = ctypes.POINTER(ctypes.c_wchar_p)
-            shell32.CommandLineToArgvW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
-            
-            argc = ctypes.c_int(0)
-            argv_ptr = shell32.CommandLineToArgvW(cmd_line, ctypes.byref(argc))
-            if argv_ptr:
-                args = [argv_ptr[i] for i in range(argc.value)]
-                ctypes.windll.kernel32.LocalFree(argv_ptr)
-                return args
-        except Exception:
-            pass
-            
-    import shlex
-    try:
-        return shlex.split(cmd_line, posix=False)
-    except Exception:
-        return cmd_line.split()
-
-
-class WindowsGuardrail:
-    """
-    AI 终端指令安全护栏，支持对命令执行路径、环境变量、多点路径绕过（..、...）
-    以及敏感系统控制指令进行拦截。
-    """
-    def __init__(self, workspace_dir: Path):
-        self.workspace = Path(workspace_dir).resolve()
-        
-        # 拦截名单：禁止执行的 Windows 高危或敏感管理程序
-        self.blocked_executables = {
-            # 磁盘/文件严重破坏
-            "format", "fdisk", "diskpart", "vssadmin", "rd", "rmdir", "del", "erase",
-            # 系统配置与服务管理 (解决 sc delete 的绕过问题)
-            "sc", "sc.exe", "net", "net1", "reg", "reg.exe", "gpupdate", "schtasks",
-            # 进程与系统会话中断
-            "taskkill", "tskill", "shutdown", "logoff",
-            # 网络下载与复杂脚本引擎 (防止通过 powershell.exe 获取外部恶意载荷)
-            "bitsadmin", "certutil", "curl", "wget", "powershell", "pwsh", "cmd", "bash", "sh"
-        }
-        
-        # 敏感系统路径正则（全小写匹配，防止利用大小写绕过）
-        self.sensitive_patterns = [
-            r"^[a-zA-Z]:\\windows",
-            r"^[a-zA-Z]:\\program files",
-            r"^[a-zA-Z]:\\programdata",
-            r"^[a-zA-Z]:\\users\\[^\\]+\\appdata",
-            r"\\system32",
-            r"\\syswow64",
-            r"\.ssh",
-            r"\\etc\\hosts"
-        ]
-
-    def _is_path_safe(self, path_str: str) -> bool:
-        # 去除首尾包裹的引号
-        clean_path = path_str.strip("'\"")
-        
-        # 1. 展开可能存在的系统环境变量 (例如 %windir%)
-        expanded = os.path.expandvars(os.path.expanduser(clean_path))
-        
-        # 2. 拦截多点路径穿越 (如 .. 或 ... 等模糊写法)
-        if ".." in expanded or "..." in expanded:
-            return False
-            
-        try:
-            target_path = Path(expanded)
-            resolved_str = str(target_path).lower().replace('/', '\\')
-            
-            # 3. 系统核心敏感目录审查
-            for pattern in self.sensitive_patterns:
-                if re.search(pattern, resolved_str):
-                    return False
-
-            # 4. 路径范围越界控制 (必须限制在 workspace 内)
-            if target_path.is_absolute():
-                resolved_path = target_path.resolve()
-                resolved_str = str(resolved_path).lower()
-                if not resolved_str.startswith(str(self.workspace).lower()):
-                    return False
-            else:
-                resolved_path = (self.workspace / target_path).resolve()
-                if not str(resolved_path).lower().startswith(str(self.workspace).lower()):
-                    return False
-        except Exception:
-            # 遇到无法正常解析的路径结构，默认实施拦截保障安全
-            return False
-            
-        return True
-
-    def validate_command(self, command_line: str) -> Tuple[bool, str]:
-        """
-        验证命令行安全。
-        返回 (bool, str) -> (是否安全, 状态说明)
-        """
-        args = parse_windows_command(command_line)
-        if not args:
-            return False, "检测到空的命令输入"
-            
-        # 1. 拦截高危可执行文件
-        exec_path = args[0]
-        exec_name = Path(exec_path).name.lower()
-        if exec_name.endswith(".exe"):
-            exec_name = exec_name[:-4]
-            
-        if exec_name in self.blocked_executables:
-            return False, f"访问受限：系统禁止执行高危管理工具 '{exec_name}'"
-            
-        # 2. 拦截所有参数中的敏感路径或越界行为
-        for arg in args[1:]:
-            if any(char in arg for char in ("\\", "/", ":", "%")) or "$" in arg:
-                if not self._is_path_safe(arg):
-                    return False, f"访问受限：参数 '{arg}' 包含不合规的系统敏感路径或试图越权访问"
-                    
-        return True, "验证通过"
-
 
 def _remove_readonly(func, path, exc_info):
     """Windows 只读文件处理回调"""
@@ -465,17 +325,6 @@ def _run_zip_install(file_content: bytes, ext_id: str, filename: str = "upload.z
 
 
 # ==================== API 路由 ====================
-
-@router.post("/validate-command", response_model=CommandValidationResponse)
-async def validate_command_endpoint(req: CommandValidationRequest):
-    """
-    提供给 AI 指令执行工具的前置校验接口。
-    AI 运行任何 Terminal 命令前，都建议先请求此接口进行安全性检查。
-    """
-    guardrail = WindowsGuardrail(EXT_DIR)
-    safe, msg = guardrail.validate_command(req.command)
-    return CommandValidationResponse(safe=safe, message=msg)
-
 
 @router.get("/list", response_model=ExtensionsResponse)
 async def list_extensions():
