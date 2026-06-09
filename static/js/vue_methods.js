@@ -2450,6 +2450,9 @@ formatMessage(content, index) {
     // 1. 用户动作入口与调度函数（可直接替换）
     // ==========================================
     async sendMessage(role = 'user') { 
+        const currentController = new AbortController(); 
+        this.abortController = currentController; // 更新全局控制器
+
         // 基础校验
         if (!this.userInput.trim() && (!this.files || this.files.length === 0) && (!this.images || this.images.length === 0)) return;
         if (this.isTyping) return;

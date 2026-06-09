@@ -291,14 +291,46 @@ def apply_hashline_edits(file_content: str, edits: list) -> tuple[bool, str, str
             s_idx = edit['start_idx']
             e_idx = edit['end_idx']
             
-            # 替换对应区块
             replacement_lines = edit['new_content'].split('\n') if edit['new_content'] else []
+            
+            # ===== 新增：杜绝空行膨胀 =====
+            new_pad_start, new_pad_end = count_empty_padding(replacement_lines)
+            
+            # 检查锚点周围原文件的空行上下文
+            old_pad_start = 0
+            while s_idx - 1 - old_pad_start >= 0 and not lines[s_idx - 1 - old_pad_start].strip():
+                old_pad_start += 1
+            
+            old_pad_end = 0
+            while e_idx + 1 + old_pad_end < len(lines) and not lines[e_idx + 1 + old_pad_end].strip():
+                old_pad_end += 1
+            
+            # 抵消双方都有的填充空行
+            strip_front = min(old_pad_start, new_pad_start)
+            strip_back = min(old_pad_end, new_pad_end)
+            
+            if strip_front > 0 or strip_back > 0:
+                new_actual_end = len(replacement_lines) - strip_back
+                replacement_lines = replacement_lines[strip_front:new_actual_end]
+            # ===== 新增结束 =====
+            
             lines[s_idx:e_idx+1] = replacement_lines
             
     except Exception as e:
         return False, file_content, f"Hash Edit Failed: {str(e)}"
         
     return True, '\n'.join(lines), "Success"
+
+
+# 辅助函数：统计首尾的空行数量
+def count_empty_padding(lines):
+    start = 0
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    end = 0
+    while end < len(lines) and not lines[len(lines)-1-end].strip():
+        end += 1
+    return start, end
 
 def _apply_patch(content: str, old_string: str, new_string: str) -> tuple[bool, str, str]:
     """
@@ -318,15 +350,6 @@ def _apply_patch(content: str, old_string: str, new_string: str) -> tuple[bool, 
     old_lines = old_lf.split('\n')
     new_lines = new_lf.split('\n')
 
-    # 辅助函数：统计首尾的空行数量
-    def count_empty_padding(lines):
-        start = 0
-        while start < len(lines) and not lines[start].strip():
-            start += 1
-        end = 0
-        while end < len(lines) and not lines[len(lines)-1-end].strip():
-            end += 1
-        return start, end
 
     # 统计并剥离 old_lines 首尾用来凑格式的空行
     old_pad_start, old_pad_end = count_empty_padding(old_lines)
@@ -724,7 +747,7 @@ async def get_or_create_docker_sandbox(cwd: str, image_name: str = "docker/sandb
 async def _exec_docker_cmd_simple(cwd: str, cmd_list: list) -> str:
     """内部辅助函数：在容器内执行简单命令并获取输出"""
     container_name = await get_or_create_docker_sandbox(cwd)
-    full_cmd = ["docker", "exec", "-w", "/workspace", container_name] + cmd_list
+    full_cmd = ["docker", "exec", "-i", "-w", "/workspace", container_name] + cmd_list
     
     proc = await asyncio.create_subprocess_exec(
         *full_cmd,
@@ -884,7 +907,11 @@ async def edit_file_patch_tool(path: str, edits: list) -> str:
         container_name = await get_or_create_docker_sandbox(real_cwd)
         
         try:
-            content = await _exec_docker_cmd_simple(real_cwd, ["cat", path])
+            script = f"""
+            with open("{path}", "r", encoding="utf-8", errors="replace") as f:
+                print(f.read(), end='')
+            """
+            content = await _exec_docker_cmd_simple(real_cwd, ["python3", "-c", script])
         except Exception as e:
             return f"[Error] Cannot read file for patching: {e}"
         
