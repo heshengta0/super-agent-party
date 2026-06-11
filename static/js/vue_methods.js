@@ -19144,4 +19144,83 @@ gotoAddExtension(){
     }
   },
 
+    // 打开保存背景图的弹窗
+    openSaveBgDialog() {
+      if (!this.systemSettings.backgroundURL) {
+        // 使用 showNotification 和 this.t()
+        showNotification(this.t('noBgToSave'), 'warning');
+        return;
+      }
+      this.newBgName = '';
+      this.saveBgDialogVisible = true;
+    },
+
+    // 确认保存背景图到历史列表
+    confirmSaveBg() {
+      if (!this.newBgName.trim()) {
+        // 使用 showNotification 和 this.t()
+        showNotification(this.t('pleaseInputBgName'), 'warning');
+        return;
+      }
+
+      // 确保列表已初始化(防范旧数据不存在该字段的情况)
+      if (!this.systemSettings.bgHistoryList) {
+        this.systemSettings.bgHistoryList = [];
+      }
+
+      // 检查当前URL是否已经在历史记录中
+      const existingIndex = this.systemSettings.bgHistoryList.findIndex(
+        bg => bg.url === this.systemSettings.backgroundURL
+      );
+
+      if (existingIndex !== -1) {
+        // 如果存在，直接覆盖名字
+        this.systemSettings.bgHistoryList[existingIndex].name = this.newBgName.trim();
+      } else {
+        // 如果不存在，新增一条记录
+        this.systemSettings.bgHistoryList.push({
+          name: this.newBgName.trim(),
+          url: this.systemSettings.backgroundURL
+        });
+      }
+
+      // 自动保存设置 
+      this.autoSaveSettings();
+
+      this.saveBgDialogVisible = false;
+      
+      // 使用 showNotification 提示成功
+      showNotification(this.t('bgSavedSuccess'), 'success');
+    },
+
+    // 切换历史背景图
+    handleBgHistorySelect(url) {
+      this.systemSettings.backgroundURL = url;
+      if (!url) {
+        // 选择"无背景图片"时，触发原有的清除逻辑
+        if (typeof this.clearBgImage === 'function') {
+          this.clearBgImage();
+        } else {
+          this.autoSaveSettings();
+        }
+      } else {
+        this.autoSaveSettings();
+      }
+    },
+
+    // 删除某条历史背景图记录
+    deleteBgHistory(url) {
+      if (!this.systemSettings.bgHistoryList) return;
+      
+      this.systemSettings.bgHistoryList = this.systemSettings.bgHistoryList.filter(
+        item => item.url !== url
+      );
+      
+      // 删除记录后，调用自动保存
+      this.autoSaveSettings();
+      
+      // 使用 showNotification 提示删除成功
+      showNotification(this.t('bgRemovedSuccess'), 'success');
+    },
+  
 }

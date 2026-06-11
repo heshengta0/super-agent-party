@@ -498,17 +498,20 @@ let vue_data = {
     systemSettings: {
       language: 'auto',
       theme: 'light',
-      fontScale: 1, // 全局界面缩放比例，1 = 100%，范围 0.85 ~ 1.5
-      codeFontScale: 1, // 代码块独立缩放比例，1 = 100%，范围 0.83 ~ 1.67
-      autoCollapseInput: false, // 聊天输入框未聚焦时是否自动折叠为 1 行 + pill 收纳到发送按钮左侧
-      network:"local",
+      fontScale: 1, 
+      codeFontScale: 1, 
+      autoCollapseInput: false, 
+      network: "local",
       proxy: 'http://127.0.0.1:7890',
-      proxyMode: 'system', //system or manual or none
+      proxyMode: 'system', 
       isChinaProxy: false,
-      chatMode:'standard', // 默认聊天界面模式
-      githubProxy: '', // GitHub 仓库代理地址，留空则直连
-      backgroundURL: '', // 背景图片URL，留空则使用默认背景
+      chatMode: 'standard', 
+      githubProxy: '', 
+      backgroundURL: '',
+      bgHistoryList: [], // <--- 新增：历史背景图列表
     },
+    saveBgDialogVisible: false,
+    newBgName: '',
     networkOptions:[
       { value: 'local', label: 'local' }, 
       { value: 'global', label: 'allDevicesVisible' },

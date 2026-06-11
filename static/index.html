@@ -12493,6 +12493,17 @@ function updateElement(el, rawMarkdown, formatFn) {
                           
                           <!-- 悬浮操作按钮组 -->
                           <div style="position: absolute; top: 10px; right: 10px; display: flex; gap: 8px;">
+                            
+                            <!-- 🌟 新增：保存按钮 -->
+                            <div 
+                              style="background: rgba(64, 158, 255, 0.85); color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; backdrop-filter: blur(4px); display: flex; align-items: center; transition: transform 0.2s;"
+                              @mouseover="$event.currentTarget.style.transform='scale(1.05)'"
+                              @mouseleave="$event.currentTarget.style.transform='scale(1)'"
+                              @click.stop="openSaveBgDialog"
+                            >
+                              <i class="fa-solid fa-bookmark" style="margin-right: 4px;"></i>{{ t('saveBgImage') || '保存' }}
+                            </div>
+
                             <!-- 清除按钮 -->
                             <div 
                               style="background: rgba(245, 108, 108, 0.85); color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; backdrop-filter: blur(4px); display: flex; align-items: center; transition: transform 0.2s;"
@@ -12527,8 +12538,33 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <span style="font-size: 14px; font-weight: 500;">{{ t('clickToUploadBg') }}</span>
                           <span style="font-size: 12px; opacity: 0.7; margin-top: 4px;">{{ t('recommendBgRatio') }}</span>
                         </div>
-
                       </div>
+
+                      <!-- 🌟 新增：历史背景图选择下拉框 -->
+                      <el-form-item class="form-item-align" style="margin-top: 16px; margin-bottom: 0;">
+                        <el-select
+                          v-model="systemSettings.backgroundURL"
+                          @change="handleBgHistorySelect"
+                          class="full-width-input"
+                          :placeholder="t('selectHistoryBg') || '选择或切换历史背景图'"
+                        >
+                          <!-- 第一个选项用于清除背景图 -->
+                          <el-option :label="t('noBackgroundImage') || '无背景图片'" value=""></el-option>
+                          <!-- 循环源改为 systemSettings.bgHistoryList -->
+                          <el-option
+                            v-for="bg in systemSettings.bgHistoryList"
+                            :key="bg.url"
+                            :label="bg.name"
+                            :value="bg.url">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                              <span>{{ bg.name }}</span>
+                              <!-- 阻止冒泡，避免点击删除时触发下拉选项的选中 -->
+                              <i class="fa-solid fa-times" style="color: var(--el-color-danger); cursor: pointer; padding: 4px;" @click.stop="deleteBgHistory(bg.url)"></i>
+                            </div>
+                          </el-option>
+                        </el-select>
+                      </el-form-item>
+
                     </div>
                   </div>
 
@@ -12621,6 +12657,28 @@ function updateElement(el, rawMarkdown, formatFn) {
                       </el-form-item>
                     </div>
                   </div>
+
+                  <!-- 🌟 新增：保存背景图命名的弹窗 -->
+                  <el-dialog 
+                    v-model="saveBgDialogVisible" 
+                    :title="t('saveBgImageTitle') || '保存背景图'" 
+                    width="400px" 
+                    align-center
+                    append-to-body>
+                    <el-input 
+                      v-model="newBgName" 
+                      :placeholder="t('bgImageNamePlaceholder') || '请输入背景图名称 (如：赛博朋克城市)'" 
+                      clearable
+                      @keyup.enter="confirmSaveBg"
+                    ></el-input>
+                    <template #footer>
+                      <span class="dialog-footer">
+                        <el-button @click="saveBgDialogVisible = false">{{ t('cancel') || '取消' }}</el-button>
+                        <el-button type="primary" @click="confirmSaveBg">{{ t('confirm') || '确定保存' }}</el-button>
+                      </span>
+                    </template>
+                  </el-dialog>
+
                 </el-form>
               </div>
 

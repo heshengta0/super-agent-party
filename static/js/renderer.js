@@ -2076,16 +2076,12 @@ const NOTIFICATION_ICONS = {
 
 let notificationTimeout;
 
-function showNotification(message, type = 'success', title = '') {
-    // 移除旧通知 (单例模式，避免右上角堆叠过多)
-    const existingNotification = document.querySelector('.notification');
-    if (existingNotification) {
-        existingNotification.remove();
-        clearTimeout(notificationTimeout);
-    }
+// 在全局作用域声明，用于保存当前活跃的所有通知实例
+const activeNotifications = [];
 
+function showNotification(message, type = 'success', title = '') {
     const iconClass = NOTIFICATION_ICONS[type] || NOTIFICATION_ICONS.info;
-    const duration = (type === 'error'|| type === 'warning') ? 5000 : 3000;
+    const duration = (type === 'error' || type === 'warning') ? 5000 : 3000;
 
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
@@ -2103,20 +2099,64 @@ function showNotification(message, type = 'success', title = '') {
 
     document.body.appendChild(notification);
     
-    // 强制重绘
+    // 动态判断基础 Top 距离（适配你的 CSS 移动端 16px，桌面端 24px）
+    const isMobile = window.innerWidth <= 768;
+    const BASE_TOP = isMobile ? 16 : 24;
+    const GAP = 16; // 每个通知之间的间距
+    
+    // 强制重绘，确保此时能获取到元素真实渲染的高度
     void notification.offsetWidth;
+    
+    // 1. 计算当前这条通知应该在的位置 (之前所有通知高度累加)
+    let currentTop = BASE_TOP;
+    activeNotifications.forEach(n => {
+        currentTop += n.offsetHeight + GAP;
+    });
+    
+    // 设置 inline style
+    notification.style.top = currentTop + 'px';
+    // 加入到活跃队列中
+    activeNotifications.push(notification);
 
     requestAnimationFrame(() => {
         notification.classList.add('show');
     });
 
-    notificationTimeout = setTimeout(() => {
+    let timer = null;
+
+    // 封装关闭逻辑
+    const closeNotification = () => {
+        const index = activeNotifications.indexOf(notification);
+        if (index === -1) return; // 防止重复触发
+
+        // 1. 从队列中移除当前通知
+        activeNotifications.splice(index, 1);
+        
+        // 2. 触发离场动画
         notification.classList.remove('show');
         notification.classList.add('hide');
+        
+        // 3. 核心：重新计算剩余通知的位置，触发丝滑上移接替
+        let newTop = BASE_TOP;
+        activeNotifications.forEach(n => {
+            n.style.top = newTop + 'px';
+            newTop += n.offsetHeight + GAP;
+        });
+
+        // 4. 动画结束后移除 DOM
         setTimeout(() => {
             if (notification.parentNode) notification.remove();
         }, 400); 
-    }, duration);
+    };
+
+    // 附加功能：允许用户直接点击弹窗提前关闭它
+    notification.addEventListener('click', () => {
+        clearTimeout(timer);
+        closeNotification();
+    });
+
+    // 设定定时器自动关闭
+    timer = setTimeout(closeNotification, duration);
 }
 
 // 兼容旧代码调用方式 (如果你的代码里只传了 message)
