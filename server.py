@@ -2054,8 +2054,7 @@ def get_system_context() -> str:
     
     # 检测 shell
     if system == "Windows":
-        # 检测是 PowerShell 还是 CMD
-        shell = "PowerShell" if "PSMODULEPATH" in os.environ else "CMD"
+        shell = "CMD"
         path_hint = "使用 Windows 路径格式（C:\\Users\\name\\file），命令使用 dir、copy、del 等"
         command_hint = f"当前使用 {shell}，命令语法为 Windows 风格。避免使用 Unix 命令（ls/cat/rm），改用 dir/type/del"
     elif system == "Darwin":

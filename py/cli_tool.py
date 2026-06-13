@@ -1622,16 +1622,7 @@ async def shell_tool_local(command: str, background: bool = False, timeout: int 
     # ==================== Windows 或 回退到标准 Shell 的情况 ====================
     
     if system == "Windows":
-        def is_strictly_cmd(cmd_str: str) -> bool:
-            c = cmd_str.lower().strip()
-            if re.search(r'%[a-z0-9_]+%', c): return True
-            if '&&' in c and '$' not in c: return True
-            return False
-            
-        if is_strictly_cmd(command):
-            exe, args = "cmd.exe", ["/c", command]
-        else:
-            exe, args = "powershell.exe", ["-NonInteractive", "-NoProfile", "-Command", command]
+        exe, args = "cmd.exe", ["/c", command]
     else:
         # 非 Windows 环境回退或后台任务
         exe, args = os.environ.get('SHELL', '/bin/bash'), ["-c", command]
