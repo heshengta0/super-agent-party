@@ -149,7 +149,10 @@
       "bochaai_api_key": "",
       "firecrawl_url": "https://api.firecrawl.dev/v2",
       "firecrawl_api_key": "",
-      "firecrawl_mode": "scrape"
+      "firecrawl_mode": "scrape",
+      "crw_url": "https://fastcrw.com/api/v1",
+      "crw_api_key": "",
+      "crw_mode": "scrape"
     },
     "targetLangSelected": "system",
     "knowledgeBases": [],

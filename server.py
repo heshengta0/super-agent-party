@@ -16,10 +16,10 @@ from py.ws_manager import ws_manager
 from py.web_search import (
     DDGsearch, searxng, Tavily_search, Bing_search, Google_search,
     Brave_search, Exa_search, Serper_search, bochaai_search,
-    jina_crawler, Crawl4Ai_search, firecrawl_search, simple_fetch, markdown_new,
+    jina_crawler, Crawl4Ai_search, firecrawl_search, crw_search, simple_fetch, markdown_new,
     duckduckgo_tool, searxng_tool, tavily_tool, bing_tool, google_tool,
     brave_tool, exa_tool, serper_tool, bochaai_tool,
-    jina_crawler_tool, simple_fetch_tool, Crawl4Ai_tool, firecrawl_tool, markdown_new_tool,
+    jina_crawler_tool, simple_fetch_tool, Crawl4Ai_tool, firecrawl_tool, crw_tool, markdown_new_tool,
 )
 from py.know_base import kb_tool, query_knowledge_base, rerank_knowledge_base
 from py.agent_tool import get_agent_tool, agent_tool_call
@@ -1115,6 +1115,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
         "jina_crawler": jina_crawler,
         "Crawl4Ai_search": Crawl4Ai_search,
         "firecrawl_search": firecrawl_search,
+        "crw_search": crw_search,
         "simple_fetch":simple_fetch,
         "markdown_new":markdown_new,
         "agent_tool_call": agent_tool_call,
@@ -3909,6 +3910,8 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                             tools.append(Crawl4Ai_tool)
                         elif settings['webSearch']['crawler'] == 'firecrawl':
                             tools.append(firecrawl_tool)
+                        elif settings['webSearch']['crawler'] == 'crw':
+                            tools.append(crw_tool)
                         elif settings['webSearch']['crawler'] == 'simpleRequest':
                             tools.append(simple_fetch_tool)
                         elif settings['webSearch']['crawler'] == 'mdnew':
@@ -5911,6 +5914,8 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                     tools.append(Crawl4Ai_tool)
                 elif settings['webSearch']['crawler'] == 'firecrawl':
                     tools.append(firecrawl_tool)
+                elif settings['webSearch']['crawler'] == 'crw':
+                    tools.append(crw_tool)
                 elif settings['webSearch']['crawler'] == 'simpleRequest':
                     tools.append(simple_fetch_tool)
                 elif settings['webSearch']['crawler'] == 'mdnew':

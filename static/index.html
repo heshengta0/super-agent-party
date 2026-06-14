@@ -10276,6 +10276,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <el-option label="Jina" value="jina" ></el-option>
                           <el-option label="Crawl4AI" value="crawl4ai" ></el-option>
                           <el-option label="Firecrawl" value="firecrawl"></el-option>
+                          <el-option label="fastCRW" value="crw"></el-option>
                         </el-select>
                       </el-form-item>
                       <el-form-item :label="t('webSearchTiming')" class="form-item-align">
@@ -10867,6 +10868,99 @@ function updateElement(el, rawMarkdown, formatFn) {
                         </el-select>
                         <div class="form-hint mode-hint">
                           {{ t(webSearchSettings.firecrawl_mode + 'ModeHint') }}
+                        </div>
+                      </el-form-item>
+                    </div>
+                  </div>
+                  <!-- fastCRW 配置 -->
+                  <div class="tool-item" v-show="webSearchSettings.crawler === 'crw'">
+                    <div class="tool-header">
+                      <div class="header-left">
+                        <span>
+                          <el-icon>
+                            <i class="fa-solid fa-bolt"></i>
+                          </el-icon>
+                          fastCRW
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://fastcrw.com/"
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-globe"></i>
+                            </el-icon>{{ t('officialWebsite') }}
+                          </el-link>
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://fastcrw.com/docs/rest-api"
+                            target="_blank"
+                            class="ml-2"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-book"></i>
+                            </el-icon>{{ t('docs') }}
+                          </el-link>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="tool-content">
+                      <el-form-item :label="t('baseURL')" class="form-item-align">
+                        <el-input
+                          v-model="webSearchSettings.crw_url"
+                          :placeholder="t('crwURLPlaceholder')"
+                          @input="autoSaveSettings"
+                          class="full-width-input"
+                        >
+                        </el-input>
+                      </el-form-item>
+
+                      <el-form-item :label="t('apiKey')" class="form-item-align">
+                        <el-input
+                          v-model="webSearchSettings.crw_api_key"
+                          :placeholder="t('crwAPIKeyPlaceholder')"
+                          show-password
+                          @input="autoSaveSettings"
+                          class="full-width-input"
+                        >
+                        </el-input>
+                        <div class="form-hint">{{ t('crwKeyHint') }}</div>
+                      </el-form-item>
+
+                      <el-form-item :label="t('operationMode')" class="form-item-align">
+                        <el-select
+                          v-model="webSearchSettings.crw_mode"
+                          @change="autoSaveSettings"
+                          class="full-width-input"
+                        >
+                          <el-option label="scrape" value="scrape">
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                              <el-icon><i class="fa-solid fa-file-lines"></i></el-icon>
+                              <span>{{ t('scrape') }}</span>
+                            </span>
+                          </el-option>
+                          <el-option label="crawl" value="crawl">
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                              <el-icon><i class="fa-solid fa-sitemap"></i></el-icon>
+                              <span>{{ t('crawl') }}</span>
+                            </span>
+                          </el-option>
+                          <el-option label="search" value="search">
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                              <el-icon><i class="fa-solid fa-magnifying-glass"></i></el-icon>
+                              <span>{{ t('search') }}</span>
+                            </span>
+                          </el-option>
+                          <el-option label="map" value="map">
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                              <el-icon><i class="fa-solid fa-map"></i></el-icon>
+                              <span>{{ t('map') }}</span>
+                            </span>
+                          </el-option>
+                        </el-select>
+                        <div class="form-hint mode-hint">
+                          {{ t(webSearchSettings.crw_mode + 'ModeHint') }}
                         </div>
                       </el-form-item>
                     </div>

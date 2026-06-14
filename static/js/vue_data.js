@@ -381,7 +381,10 @@ let vue_data = {
       bochaai_api_key: '',
       firecrawl_url: 'https://api.firecrawl.dev/v2', // 官方API或自部署地址
       firecrawl_api_key: '',
-      firecrawl_mode: 'scrape', 
+      firecrawl_mode: 'scrape',
+      crw_url: 'https://fastcrw.com/api/v1', // fastCRW 云端或自部署地址
+      crw_api_key: '',
+      crw_mode: 'scrape',
     },
     codeSettings: {
       enabled: false,

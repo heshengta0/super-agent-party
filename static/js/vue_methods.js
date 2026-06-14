@@ -17409,6 +17409,14 @@ clearSegments() {
       }
       this.autoSaveSettings();
     },
+    handleCrwPresetChange(val) {
+      if (val === 'official') {
+        this.webSearchSettings.crw_url = 'https://fastcrw.com/api/v1';
+      } else {
+        this.webSearchSettings.crw_url = 'http://localhost:3000/v1';
+      }
+      this.autoSaveSettings();
+    },
 
 // Methods
 
@@ -18543,6 +18551,11 @@ closeTaskCenter() {
             if (!settings.firecrawl_url?.trim()) errorMsg = this.t('pleaseConfigFirecrawlUrl');
             // 如果你觉得 Firecrawl 的 API Key 也必须强制填写，可以解除下面这行的注释：
             // else if (!settings.firecrawl_api_key?.trim()) errorMsg = this.t('pleaseConfigFirecrawlApiKey');
+            break;
+          case 'crw':
+            if (!settings.crw_url?.trim()) errorMsg = this.t('pleaseConfigCrwUrl');
+            // 如果你觉得 fastCRW 的 API Key 也必须强制填写，可以解除下面这行的注释：
+            // else if (!settings.crw_api_key?.trim()) errorMsg = this.t('pleaseConfigCrwApiKey');
             break;
           
           // 注意：jina API Key 是可选的，所以这里不写 case 'jina' 的报错逻辑，直接放行

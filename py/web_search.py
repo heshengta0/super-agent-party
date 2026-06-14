@@ -871,6 +871,170 @@ firecrawl_tool = {
     },
 }
 
+# ============== 2b. fastCRW (CRW) ==============
+
+class CrwClient(FirecrawlClient):
+    """
+    fastCRW API 客户端
+    fastCRW 是 Firecrawl 兼容的网页数据引擎（单文件 Rust 二进制，可自部署或使用云端）。
+    复用 FirecrawlClient 的实现，仅切换默认 base URL 与鉴权约定。
+    """
+    pass
+
+
+async def crw_search(original_url: str, query: str = None) -> str:
+    """
+    fastCRW 主函数
+    支持多种模式：scrape(单页), crawl(整站), search(搜索), map(地图)
+    与 firecrawl_search 镜像，使用 CRW_API_KEY 与 fastCRW 云端默认地址。
+    """
+    settings = await load_settings()
+
+    def sync_crawler():
+        try:
+            # 获取配置
+            base_url = settings['webSearch'].get('crw_url', 'https://fastcrw.com/api/v1')
+            api_key = settings['webSearch'].get('crw_api_key', '') or os.getenv('CRW_API_KEY', '')
+            mode = settings['webSearch'].get('crw_mode', 'scrape')
+
+            # 初始化客户端
+            client = CrwClient(base_url, api_key)
+
+            # 根据模式执行不同操作
+            if mode == 'scrape':
+                # 单页抓取
+                result = client.scrape(
+                    original_url,
+                    formats=["markdown", "html"],
+                    onlyMainContent=True  # 只获取主要内容
+                )
+
+                if result.get("success") and result.get("data"):
+                    data = result["data"]
+                    markdown = data.get("markdown", "")
+                    metadata = data.get("metadata", {})
+                    title = metadata.get("title", "未命名页面")
+
+                    return f"# {title}\n\n{markdown}"
+                else:
+                    return f"fastCRW抓取失败：{result.get('error', '未知错误')}"
+
+            elif mode == 'crawl':
+                # 整站爬取
+                result = client.crawl(
+                    original_url,
+                    limit=10,  # 限制页面数避免过长
+                    scrapeOptions={
+                        "formats": ["markdown"],
+                        "onlyMainContent": True
+                    }
+                )
+
+                if result.get("status") == "completed":
+                    pages = result.get("data", [])
+                    total = result.get("total", 0)
+
+                    content_parts = [f"# 站点爬取结果\n\n共获取 {total} 个页面：\n"]
+
+                    for i, page in enumerate(pages[:5], 1):  # 最多显示5页
+                        md = page.get("markdown", "")
+                        meta = page.get("metadata", {})
+                        title = meta.get("title", f"页面{i}")
+                        url = meta.get("sourceURL", original_url)
+
+                        content_parts.append(f"\n## {title}\n{md[:2000]}...\n[来源]({url})")
+
+                    return "\n".join(content_parts)
+                else:
+                    return f"fastCRW爬取失败：{result.get('error', '未知错误')}"
+
+            elif mode == 'search':
+                # 搜索模式 - 当传入的是查询词而非URL时
+                search_query = query or original_url  # 如果没有单独提供query，将URL作为查询词
+                result = client.search(
+                    search_query,
+                    limit=5,
+                    scrape_options={"formats": ["markdown"]}
+                )
+
+                if result.get("success") and result.get("data"):
+                    items = result["data"]
+                    content_parts = [f"# 搜索结果: {search_query}\n"]
+
+                    for i, item in enumerate(items, 1):
+                        title = item.get("title", "无标题")
+                        url = item.get("url", "")
+                        desc = item.get("description", "")
+                        markdown = item.get("markdown", "")
+
+                        content_parts.append(f"\n## {i}. {title}\n{desc}\n")
+                        if markdown:
+                            content_parts.append(f"{markdown[:1500]}...")
+                        content_parts.append(f"[来源]({url})")
+
+                    return "\n".join(content_parts)
+                else:
+                    return f"fastCRW搜索失败：{result.get('error', '未知错误')}"
+
+            elif mode == 'map':
+                # 网站地图模式
+                result = client.map(original_url)
+
+                if result.get("success") and result.get("links"):
+                    links = result["links"]
+                    content_parts = [f"# 网站地图: {original_url}\n\n发现 {len(links)} 个链接：\n"]
+
+                    for link in links[:20]:  # 限制显示数量
+                        title = link.get("title", "无标题")
+                        url = link.get("url", "")
+                        desc = link.get("description", "")
+                        content_parts.append(f"- [{title}]({url}) - {desc}")
+
+                    return "\n".join(content_parts)
+                else:
+                    return f"fastCRW地图生成失败：{result.get('error', '未知错误')}"
+
+            else:
+                return f"未知的fastCRW模式: {mode}"
+
+        except requests.RequestException as e:
+            return f"fastCRW请求失败：{str(e)}"
+        except Exception as e:
+            return f"fastCRW处理失败：{str(e)}"
+
+    try:
+        # fastCRW 自部署版本通常不需要检查robots.txt（由服务内部处理）
+        settings = await load_settings()
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, sync_crawler)
+    except Exception as e:
+        print(f"Async execution error: {e}")
+        return str(e)
+
+
+crw_tool = {
+    "type": "function",
+    "function": {
+        "name": "crw_search",
+        "description": "通过fastCRW服务获取网页内容。支持单页抓取、整站爬取、搜索和网站地图模式。可以处理JavaScript渲染的页面，返回结构化的Markdown内容。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "original_url": {
+                    "type": "string",
+                    "description": "需要处理的URL地址或搜索查询词（当模式为search时）。",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "可选，当使用search模式时的具体搜索词。如果不提供，将使用original_url作为查询词。",
+                }
+            },
+            "required": ["original_url"],
+        },
+    },
+}
+
+
 from bs4 import BeautifulSoup
 import re
 
