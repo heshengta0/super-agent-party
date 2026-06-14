@@ -15506,7 +15506,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                           </el-form-item>
 
                           <!-- THA模型选择框 -->
-                          <el-form-item label="THA Model">
+                          <el-form-item :label="t('thaModel')">
                             <el-select
                               v-model="THAConfig.selectedModelId"
                               @change="autoSaveSettings"

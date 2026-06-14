@@ -1751,4 +1751,5 @@ key3`,
         'thaNotice1':'THA 桌面宠物使用 THA4 ONNX 模型进行 AI 实时渲染，上传 .zip 包（含 model.onnx + character.png）。',
         'dropTHAZipFile':'点击或拖放 .zip 文件到此处（包含 model.onnx + character.png）',
         'THAPet': 'THA 桌宠机器人',
+        'thaModel': 'THA 模型',
     }

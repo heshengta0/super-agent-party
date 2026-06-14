@@ -1748,4 +1748,5 @@ Key3`,
         'thaNotice1':'THA table pet uses THA4 ONNX model for AI real-time rendering. Upload a .zip package (containing model.onnx + character.png).',
         'dropTHAZipFile':'Click or drag and drop a .zip file here (containing model.onnx + character.png)',
         'THAPet': 'THA Table Pet Bot',
+        'thaModel': 'THA Model',
     }
