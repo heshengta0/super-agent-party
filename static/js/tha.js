@@ -258,7 +258,6 @@ document.addEventListener('mousemove', (e) => {
       isModelHiddenByHover = true;
       app.view.style.transition = 'opacity 150ms ease';
       app.view.style.opacity = '0';
-      if (window.electronAPI) window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
   }
 });
 
@@ -271,7 +270,6 @@ document.addEventListener('mouseleave', () => {
       isModelHiddenByHover = false;
       app.view.style.transition = 'opacity 150ms ease';
       app.view.style.opacity = '1';
-      if (!isLocked && window.electronAPI) window.electronAPI.setIgnoreMouseEvents(false);
   }
 });
 
@@ -308,10 +306,20 @@ document.body.addEventListener('touchstart', (e) => {
 controlPanel.addEventListener('mouseenter', () => {
   isPanelHovered = true; clearTimeout(hideTimeout); showPanel();
   if (isLocked && window.electronAPI) window.electronAPI.setIgnoreMouseEvents(false);
+  if (isAutoHideEnabled && !isLocked && isModelHiddenByHover) {
+    isModelHiddenByHover = false;
+    app.view.style.transition = 'opacity 150ms ease';
+    app.view.style.opacity = '1';
+  }
 });
 controlPanel.addEventListener('mouseleave', () => {
   isPanelHovered = false; scheduleHide();
   if (isLocked && window.electronAPI) window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+  if (isAutoHideEnabled && !isLocked && !isModelHiddenByHover) {
+    isModelHiddenByHover = true;
+    app.view.style.transition = 'opacity 150ms ease';
+    app.view.style.opacity = '0';
+  }
 });
 scheduleHide();
 
