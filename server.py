@@ -10093,9 +10093,9 @@ async def delete_gauss_scene(filename: str):
 @app.get("/update_storage")
 async def update_storage_endpoint(request: Request):
     settings = await load_settings()
-    textFiles = settings.get("textFiles") or []
-    imageFiles = settings.get("imageFiles") or []
-    videoFiles = settings.get("videoFiles") or []
+    textFiles = [item for item in (settings.get("textFiles") or []) if isinstance(item,dict) and 'unique_filename' in item]
+    imageFiles = [item for item in (settings.get("imageFiles") or []) if isinstance(item,dict) and 'unique_filename' in item]
+    videoFiles = [item for item in (settings.get("videoFiles") or []) if isinstance(item,dict) and 'unique_filename' in item]
     # 检查UPLOAD_FILES_DIR目录中的文件，根据ALLOWED_EXTENSIONS、ALLOWED_IMAGE_EXTENSIONS、ALLOWED_VIDEO_EXTENSIONS分类，如果不存在于textFiles、imageFiles、videoFiles中则添加进去
     # 三个列表的元素是字典，包含"unique_filename"和"original_filename"两个键
     
