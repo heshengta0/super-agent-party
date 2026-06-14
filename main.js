@@ -470,6 +470,7 @@ async function startBackend() {
           ELECTRON_NPM_CLI: npmCliPath,
           ELECTRON_RESOURCES_PATH: app.isPackaged ? process.resourcesPath : path.join(__dirname),
           ELECTRON_ACPM_PATH: getAcpxPath(),
+          ELECTRON_USER_DATA: app.getPath('userData'),
         }
       };
 

@@ -30,7 +30,7 @@ base_path = get_base_path()
 
 # ----------------- 2. 路径定义 -----------------
 # 1. 定义“锚点”路径（系统默认配置目录，无论怎么改路径，这个引导文件永远放在这）
-ANCHOR_USER_DATA_DIR = user_data_dir(APP_NAME, roaming=True)
+ANCHOR_USER_DATA_DIR = os.environ.get('ELECTRON_USER_DATA') or user_data_dir(APP_NAME, roaming=True)
 PATH_REDIRECT_FILE = os.path.join(ANCHOR_USER_DATA_DIR, 'path_config.json')
 
 def get_effective_user_data_dir():
@@ -469,7 +469,8 @@ async def load_settings():
             if row:
                 try:
                     user_settings = json.loads(row[0])
-                except Exception:
+                except Exception as e:
+                    logging.error(f"加载用户设置失败 ({DATABASE_PATH}): {e}")
                     user_settings = {}
                 
                 # Merge logic
