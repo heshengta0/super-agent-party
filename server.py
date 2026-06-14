@@ -8095,10 +8095,11 @@ async def vrm_websocket_endpoint(websocket: WebSocket):
                 if data.get('type') == 'animationComplete':
                     await tts_manager.send_to_main(msg["text"])
             # VRM 窗口通常不主动给主窗口发二进制，所以这里暂不处理 bytes
-    except WebSocketDisconnect:
-        tts_manager.disconnect_vrm(websocket)
+    except (WebSocketDisconnect, RuntimeError):
+        pass
     except Exception as e:
         logging.error(f"WS error in VRM: {e}")
+    finally:
         tts_manager.disconnect_vrm(websocket)
 
 @app.websocket("/ws/tha")
@@ -8167,7 +8168,7 @@ async def tha_websocket_endpoint(websocket: WebSocket):
                     elif cmd_type == "mouse":
                         gen.set_mouse(float(data.get("x", 0)), float(data.get("y", 0)))
             except WebSocketDisconnect:
-                raise
+                return
             except Exception as e:
                 logging.error(f"[THA WS] Instruction receive error: {e}")
 
@@ -8182,7 +8183,6 @@ async def tha_websocket_endpoint(websocket: WebSocket):
                     start_time = time.perf_counter()
                     
                     pose = gen.step()
-                    # 使用线程池异步渲染，保证主事件循环通畅
                     jpeg = await loop.run_in_executor(None, engine.render, pose)
                     
                     await websocket.send_bytes(jpeg)
@@ -8191,7 +8191,7 @@ async def tha_websocket_endpoint(websocket: WebSocket):
                     sleep_time = max(0.0, frame_interval - elapsed)
                     await asyncio.sleep(sleep_time)
             except WebSocketDisconnect:
-                raise
+                return
             except Exception as e:
                 logging.error(f"[THA WS] Frame render error: {e}")
 
