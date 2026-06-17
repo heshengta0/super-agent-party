@@ -737,6 +737,8 @@ window.lang_zhCN = {
         'isChinaProxy': 'npm和uv下载源使用中国代理',
         'proxyPlaceholder': '请输入代理地址，例如：http://127.0.0.1:7890 或 http://127.0.0.1:10809',
         'proxyNotice': '如果跟随系统代理没有生效，可以尝试手动代理。手动代理需要输入HTTP代理地址，例如：http://127.0.0.1:7890 或 http://127.0.0.1:10809',
+        'contentSafety': '内容安全过滤',
+        'contentSafetyNotice': '启用后将自动拦截AI对话中的敏感内容。本功能使用本地关键词列表，无需联网，不会上传任何数据。',
         'wxNotice': '启动机器人之前，你必须先登录微信，并且保证微信窗口在屏幕上。agent party将模拟用户行为接管你的微信。',
         'language': '语言',
         'webSpeechAPI': 'Web Speech API',

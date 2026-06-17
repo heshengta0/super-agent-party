@@ -12378,6 +12378,18 @@ function updateElement(el, rawMarkdown, formatFn) {
                     </el-alert>
                   </div>
 
+                  <!-- 内容安全过滤 -->
+                  <div class="tool-item">
+                    <div class="tool-header">
+                      <span>
+                        <el-icon><i class="fa-solid fa-shield-halved"></i></el-icon>
+                        {{ t('contentSafety') }}
+                      </span>
+                      <el-switch v-model="systemSettings.contentSafety" @change="autoSaveSettings" :disabled="isSteamBuild"></el-switch>
+                    </div>
+                    <span class="tool-desc">{{ t('contentSafetyNotice') }}</span>
+                  </div>
+
                   <!-- 数据存储路径设置 -->
                   <div class="tool-item" v-if="!isDocker">
                     <div class="tool-header">

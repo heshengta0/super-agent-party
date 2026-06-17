@@ -506,7 +506,8 @@ let vue_data = {
       chatMode: 'standard', 
       githubProxy: '', 
       backgroundURL: '',
-      bgHistoryList: [], // <--- 新增：历史背景图列表
+      bgHistoryList: [],
+      contentSafety: false,
     },
     saveBgDialogVisible: false,
     newBgName: '',

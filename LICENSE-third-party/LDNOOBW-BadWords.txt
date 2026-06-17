@@ -1,0 +1,14 @@
+Multilingual Profanity Word Lists (LDNOOBW / Shutterstock)
+==============================================================
+
+Source: List of Dirty, Naughty, Obscene, and Otherwise Bad Words
+Author: LDNOOBW / Shutterstock
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+URL: https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words
+
+This project includes word lists for the following languages:
+English (en), Chinese (zh), Japanese (ja), Korean (ko), French (fr),
+German (de), Russian (ru), Thai (th), Vietnamese (vi), Spanish (es),
+Portuguese (pt), Italian (it), Arabic (ar).
+
+The word lists have been merged with other sources under config/safety_words.json.

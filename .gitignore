@@ -171,6 +171,7 @@ node_modules/
 super/
 
 config/settings.json
+config/safety_words.json
 test/
 uploaded_files/
 kb/

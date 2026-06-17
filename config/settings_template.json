@@ -23,7 +23,8 @@
       "proxyMode": "system",
       "isChinaProxy": false,
       "githubProxy": "",
-      "bgHistoryList": []
+      "bgHistoryList": [],
+      "contentSafety": false
     },
     "mainAgent":"super-model",
     "mcpServers": {},

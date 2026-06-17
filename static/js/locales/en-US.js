@@ -734,6 +734,8 @@ window.lang_enUS = {
         'isChinaProxy': 'Use Chinese proxy for npm and uv download sources',
         'proxyPlaceholder': 'Please enter the proxy address, such as http://127.0.0.1:7890 or http://127.0.0.1:10809',
         'proxyNotice': 'If following the system proxy does not work, you can try using a manual proxy. For manual proxy, you need to enter the HTTP proxy address, for example: http://127.0.0.1:7890 or http://127.0.0.1:10809.',
+        'contentSafety': 'Content Safety Filter',
+        'contentSafetyNotice': 'Automatically filters sensitive content from AI conversations using local keyword lists. No internet required, no data uploaded.',
         'wxNotice': 'Before starting the robot, you must log in to WeChat and ensure that the WeChat window is on the screen. The agent party will simulate user behavior and take over your WeChat account.',
         'language': 'Language',
         'webSpeechAPI': 'Web Speech API',

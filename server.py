@@ -41,6 +41,7 @@ from py.utility_tools import (
     get_wikipedia_summary_and_sections, get_wikipedia_section_content, search_arxiv_papers,
 )
 from py.autoBehavior import auto_behavior_tool, auto_behavior
+from py.guard import load_safety_words, check_content_safety
 from py.cdp_tool import (
     all_cdp_tools, list_pages, navigate_page, new_page, close_page, select_page,
     take_snapshot, wait_for, click, fill, hover, press_key, evaluate_script,
@@ -748,6 +749,13 @@ async def lifespan(app: FastAPI):
     
     from py.sleep_guard import SleepGuard
     sleep_guard = SleepGuard(verbose=True)
+
+    load_safety_words()
+
+    if _is_steam_build:
+        settings.setdefault("systemSettings", {})
+        settings["systemSettings"]["contentSafety"] = True
+
     try:
         await asyncio.to_thread(sleep_guard.start)
         if sleep_guard.is_running():
@@ -4386,6 +4394,12 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                     }
                     yield f"data: {json.dumps(final_chunk)}\n\n"
                     full_content += final_chunk["choices"][0]["delta"].get("content", "")
+                if settings.get("systemSettings", {}).get("contentSafety", False) and full_content:
+                    is_safe, matched = await check_content_safety(full_content)
+                    if not is_safe:
+                        correction = {"choices": [{"delta": {"content": "[该回复已被内容安全策略自动替换]", "_safety_filtered": True}}]}
+                        yield f"data: {json.dumps(correction)}\n\n"
+                        full_content = "[该回复已被内容安全策略自动替换]"
                 if not tool_calls:
                     # 将响应添加到消息列表
                     request.messages.append({
@@ -5197,6 +5211,12 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                         }
                         yield f"data: {json.dumps(final_chunk)}\n\n"
                         full_content += final_chunk["choices"][0]["delta"].get("content", "")
+                    if settings.get("systemSettings", {}).get("contentSafety", False) and full_content:
+                        is_safe, matched = await check_content_safety(full_content)
+                        if not is_safe:
+                            correction = {"choices": [{"delta": {"content": "[该回复已被内容安全策略自动替换]", "_safety_filtered": True}}]}
+                            yield f"data: {json.dumps(correction)}\n\n"
+                            full_content = "[该回复已被内容安全策略自动替换]"
                     if not tool_calls:
                         # 将响应添加到消息列表
                         request.messages.append({
@@ -6677,6 +6697,23 @@ async def chat_endpoint(request: ChatRequest, fastapi_request: Request):
     enable_deep_research = request.enable_deep_research or False
     enable_web_search = request.enable_web_search or False
     async_tools_id = request.asyncToolsID or None
+
+    current_settings = await load_settings()
+    if current_settings.get("systemSettings", {}).get("contentSafety", False):
+        all_text = ""
+        for msg in request.messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                all_text += " " + content
+            elif isinstance(content, list):
+                all_text += " " + " ".join(item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text")
+        is_safe, matched = await check_content_safety(all_text)
+        if not is_safe:
+            return JSONResponse(
+                status_code=403,
+                content={"error": {"message": "您的输入包含敏感内容，已被安全策略拦截。", "type": "content_safety", "code": 403}}
+            )
+
     await _apply_group_memory_context(request)
 
     if model == 'super-model':
@@ -6902,7 +6939,19 @@ async def simple_chat_endpoint(request: ChatRequest):
                                "type": "server_error", "code": 500}}
         )
 
-    # --------------- 无脑使用 fast_client ---------------
+    # safety check for all input including system prompt
+    if current_settings.get("systemSettings", {}).get("contentSafety", False):
+        all_text = ""
+        for msg in request.messages:
+            all_text += " " + (msg.content or "")
+        is_safe, matched = await check_content_safety(all_text)
+        if not is_safe:
+            return JSONResponse(
+                status_code=403,
+                content={"error": {"message": "您的输入包含敏感内容，已被安全策略拦截。",
+                                   "type": "content_safety", "code": 403}}
+            )
+
     fast_cfg = current_settings.get('fast', {})
     
     # 初始化或更新 fast_client
@@ -11336,6 +11385,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif msg_type == "save_settings":
                 settings_dict = data.get("data", {})
+                cur_settings = await load_settings()
+                if cur_settings.get("systemSettings", {}).get("contentSafety", False):
+                    sys_prompt = settings_dict.get("system_prompt", "")
+                    if sys_prompt:
+                        is_safe, matched = await check_content_safety(sys_prompt)
+                        if not is_safe:
+                            await ws_manager.send_json({"type": "error", "message": "系统提示词包含敏感内容，设置未保存。"}, websocket)
+                            break
                 await save_settings(settings_dict)
                 await sync_all_bots_behavior(settings_dict)
 
@@ -11349,7 +11406,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 await ws_manager.broadcast_settings_update(settings_dict, exclude=websocket)
 
             elif msg_type == "save_conversations":
-                await save_covs(data.get("data", {}))
+                cov_data = data.get("data", {})
+                cur_settings = await load_settings()
+                if cur_settings.get("systemSettings", {}).get("contentSafety", False):
+                    covs = cov_data.get("conversations", [])
+                    for conv in covs:
+                        for msg in conv.get("messages", []):
+                            if msg.get("role") == "assistant":
+                                content = msg.get("content", "")
+                                if isinstance(content, str):
+                                    is_safe, matched = await check_content_safety(content)
+                                    if not is_safe:
+                                        msg["content"] = "[该回复已被内容安全策略自动替换]"
+                                        msg["_safety_filtered"] = True
+                                elif isinstance(content, list):
+                                    text = " ".join(item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text")
+                                    is_safe, matched = await check_content_safety(text)
+                                    if not is_safe:
+                                        msg["content"] = "[该回复已被内容安全策略自动替换]"
+                                        msg["_safety_filtered"] = True
+                await save_covs(cov_data)
                 await ws_manager.send_json({
                     "type": "conversations_saved",
                     "correlationId": data.get("correlationId"),
@@ -11399,6 +11475,12 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg_type == "set_system_prompt":
                 has_sent_prompt = True # 标记该连接发送过 Prompt
                 extension_system_prompt = data.get("data", {}).get("text", "")
+                cur_settings = await load_settings()
+                if cur_settings.get("systemSettings", {}).get("contentSafety", False):
+                    is_safe, matched = await check_content_safety(extension_system_prompt)
+                    if not is_safe:
+                        await ws_manager.send_json({"type": "error", "message": "系统提示词包含敏感内容，已被安全策略拦截。"}, websocket)
+                        break
                 await ws_manager.broadcast({
                     "type": "update_system_prompt",
                     "data": {

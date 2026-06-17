@@ -27,7 +27,10 @@ RUN pip install uv && \
 # 4. 最后再复制源代码 (这样改代码不会触发重新安装依赖)
 COPY . .
 
-# 5. 设置权限和目录
+# 5. 拉取安全词表（不入 git，构建时从上游获取）
+RUN python scripts/fetch_safety_words.py
+
+# 6. 设置权限和目录
 RUN mkdir -p uploaded_files && \
     chmod 755 uploaded_files
 

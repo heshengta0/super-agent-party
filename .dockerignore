@@ -13,6 +13,7 @@ server.build/
 server.dist/
 agents/
 config/settings.json
+config/safety_words.json
 test/
 .venv/
 agents/

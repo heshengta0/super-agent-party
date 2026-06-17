@@ -2057,6 +2057,7 @@ formatMessage(content, index) {
           if (isSteamBuild) {
             if (this.ttsSettings.engine === 'edgetts') this.ttsSettings.engine = 'systemtts';
             if (this.text2imgSettings.engine === 'pollinations') this.text2imgSettings.engine = 'openai';
+            this.systemSettings.contentSafety = true;
           }
           this.behaviorSettings = data.data.behaviorSettings || this.behaviorSettings;
           this.VRMConfig = data.data.VRMConfig || this.VRMConfig;
@@ -2066,6 +2067,7 @@ formatMessage(content, index) {
           this.workflows = data.data.workflows || this.workflows;
           this.customHttpTools = data.data.custom_http || this.customHttpTools;
           this.systemSettings = data.data.systemSettings || this.systemSettings;
+          if (isSteamBuild && !this.systemSettings.contentSafety) this.systemSettings.contentSafety = true;
       }
       else if (data.type === 'settings') {
           this.ensureConversationGroups();
@@ -2134,6 +2136,7 @@ formatMessage(content, index) {
           this.knowledgeBases = data.data.knowledgeBases || this.knowledgeBases;
           this.modelProviders = data.data.modelProviders || this.modelProviders;
           this.systemSettings = data.data.systemSettings || this.systemSettings;
+          if (isSteamBuild && !this.systemSettings.contentSafety) this.systemSettings.contentSafety = true;
           if (this.systemSettings && (this.systemSettings.fontScale === undefined || this.systemSettings.fontScale === null)) {
             this.systemSettings.fontScale = 1;
           }
@@ -2998,6 +3001,16 @@ formatMessage(content, index) {
                         }
                         const delta = parsed.choices?.[0]?.delta;
                         if (!delta) continue;
+
+                        if (delta._safety_filtered) {
+                            currentMsg.pure_content = delta.content;
+                            currentMsg.content = delta.content;
+                            currentMsg.backend_content = [{ role: 'assistant', content: delta.content }];
+                            currentMsg.displayBlocks = [{ type: 'text', content: delta.content }];
+                            this._streamTextBuffer = null;
+                            this.streamUpdateTimer = true;
+                            continue;
+                        }
 
                         if (this.first_token && !isResume) {
                             this.first_token = false;
