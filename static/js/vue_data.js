@@ -1,4 +1,5 @@
 const isElectron = window.electronAPI ? true : false;
+const isSteamBuild = window.__IS_STEAM_BUILD__ || false;
 // 事件监听改造
 if (isElectron) {
     document.addEventListener('contextmenu', (e) => {
@@ -85,6 +86,7 @@ let vue_data = {
     isdocker: false,
     isExpanded: true,
     isElectron: isElectron,
+    isSteamBuild: isSteamBuild,
     isCollapse: true,
     isBtnCollapse: true,
     activeMenu: 'dashboard',

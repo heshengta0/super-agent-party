@@ -2054,6 +2054,10 @@ formatMessage(content, index) {
           this.memorySettings = data.data.memorySettings || this.memorySettings;
           this.text2imgSettings = data.data.text2imgSettings || this.text2imgSettings;
           this.ttsSettings = data.data.ttsSettings || this.ttsSettings;
+          if (isSteamBuild) {
+            if (this.ttsSettings.engine === 'edgetts') this.ttsSettings.engine = 'systemtts';
+            if (this.text2imgSettings.engine === 'pollinations') this.text2imgSettings.engine = 'openai';
+          }
           this.behaviorSettings = data.data.behaviorSettings || this.behaviorSettings;
           this.VRMConfig = data.data.VRMConfig || this.VRMConfig;
           this.THAConfig = data.data.THAConfig || this.THAConfig;
@@ -2168,6 +2172,7 @@ formatMessage(content, index) {
           this.text2imgSettings = data.data.text2imgSettings || this.text2imgSettings;
           this.asrSettings = data.data.asrSettings || this.asrSettings;
           this.ttsSettings = data.data.ttsSettings || this.ttsSettings;
+          if (isSteamBuild && this.ttsSettings.engine === 'edgetts') this.ttsSettings.engine = 'systemtts';
           this.behaviorSettings = data.data.behaviorSettings || this.behaviorSettings;
           this.VRMConfig = data.data.VRMConfig || this.VRMConfig;
           this.THAConfig = data.data.THAConfig || this.THAConfig;

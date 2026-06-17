@@ -454,6 +454,9 @@ serper_tool = {
 
 async def jina_crawler(original_url):
     settings = await load_settings()
+    jina_api_key = settings['webSearch'].get('jina_api_key', "")
+    if os.environ.get("IS_STEAM_BUILD", "0") == "1" and not jina_api_key.strip():
+        return "Jina API Key 未配置。请在设置中填入你的 Jina API Key。Jina API Key is required in this build."
     def sync_crawler():
         detail_url = "https://r.jina.ai/"
         url = f"{detail_url}{original_url}"

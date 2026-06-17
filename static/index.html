@@ -4142,7 +4142,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                         @change="fetchTetosNewVoices(newTTSConfig.engine)"
                       >
                         <el-option :label="t('moss-TTS')" value="moss"></el-option>
-                        <el-option :label="t('edgetts')" value="edgetts"></el-option>
+                        <el-option v-if="!isSteamBuild" :label="t('edgetts')" value="edgetts"></el-option>
                         <el-option :label="t('systemtts')" value="systemtts" ></el-option>
                         <el-option label="GPT Sovits" value="GSV"></el-option>
                         <el-option :label="t('openaiLikeTTS')" value="openai"></el-option>
@@ -4916,7 +4916,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                       </div>
                     </div>
 
-                    <div class="tool-item" v-show="newTTSConfig.engine === 'edgetts'">
+                    <div class="tool-item" v-show="newTTSConfig.engine === 'edgetts' && !isSteamBuild">
                       <div class="tool-header">
                         <div class="header-left">
                           <span>
@@ -7210,7 +7210,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                           @change="autoSaveSettings"
                           class="full-width-input"
                         >
-                          <el-option :label="t('pollinations')" value="pollinations" ></el-option>
+                          <el-option :label="t('pollinations')" value="pollinations" v-if="!isSteamBuild" ></el-option>
                           <el-option :label="t('openaiImageLike')" value="openai" ></el-option>
                           <el-option :label="t('openaiChatLike')" value="openaiChat" ></el-option>
                         </el-select>
@@ -7239,7 +7239,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                       </el-alert>
                     </div>
                   </div>
-                  <div class="tool-item" v-show="text2imgSettings.engine === 'pollinations'">
+                  <div class="tool-item" v-show="text2imgSettings.engine === 'pollinations' && !isSteamBuild">
                     <div class="tool-header">
                       <div class="header-left">
                         <span>
@@ -7763,7 +7763,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                           class="full-width-input"
                         >
                           <el-option :label="t('moss-TTS')" value="moss"></el-option>
-                          <el-option :label="t('edgetts')" value="edgetts" ></el-option>
+                          <el-option :label="t('edgetts')" value="edgetts" v-if="!isSteamBuild" ></el-option>
                           <el-option :label="t('systemtts')" value="systemtts" ></el-option>
                           <el-option label="GPT Sovits" value="GSV" ></el-option>
                           <el-option :label="t('openaiLikeTTS')" value="openai" ></el-option>
@@ -8662,7 +8662,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                     </div>
                   </div>
 
-                  <div class="tool-item" v-show="ttsSettings.engine === 'edgetts'">
+                  <div class="tool-item" v-show="ttsSettings.engine === 'edgetts' && !isSteamBuild">
                     <div class="tool-header">
                       <div class="header-left">
                         <span>
@@ -10271,7 +10271,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                           @change="autoSaveSettings"
                           class="full-width-input"
                         >
-                          <el-option label="DuckDuckGo" value="duckduckgo" ></el-option>
+                          <el-option label="DuckDuckGo" value="duckduckgo" v-if="!isSteamBuild" ></el-option>
                           <el-option label="SearXNG" value="searxng" ></el-option>
                           <el-option label="Tavily" value="tavily" ></el-option>
                           <el-option label="Bing" value="bing" ></el-option>
@@ -10308,7 +10308,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                       </el-form-item>
                     </div>
                   </div>
-                  <div class="tool-item" v-show="webSearchSettings.engine === 'duckduckgo'">
+                  <div class="tool-item" v-show="webSearchSettings.engine === 'duckduckgo' && !isSteamBuild">
                     <div class="tool-header">
                       <div class="header-left">
                         <span>
@@ -10745,7 +10745,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                       <el-form-item :label="t('apiKey')" class="form-item-align">
                         <el-input
                           v-model="webSearchSettings.jina_api_key"
-                          :placeholder="t('jinaAPIKeyPlaceholder')"
+                          :placeholder="t(isSteamBuild ? 'jinaAPIKeyPlaceholderRequired' : 'jinaAPIKeyPlaceholder')"
                           show-password
                           @input="autoSaveSettings"
                           class="full-width-input"

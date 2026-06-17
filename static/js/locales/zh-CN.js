@@ -66,6 +66,7 @@ window.lang_zhCN = {
         'searxngURLPlaceholder': 'SearXNG URL (docker部署后开放的端口)',
         'tavilyAPIKeyPlaceholder': 'tavily API 密钥',
         'jinaAPIKeyPlaceholder': 'jina API 密钥(可选)',
+        'jinaAPIKeyPlaceholderRequired': 'jina API 密钥',
         'crawl4AiURLPlaceholder': 'Crawl4Ai url (docker部署后开放的端口)',
         'crawl4AiAPIKeyPlaceholder': 'Crawl4Ai API 密钥(可选)',
         'comfyuiAPIKey': 'comfyui API 密钥(可选)',

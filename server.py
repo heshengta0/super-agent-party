@@ -8,6 +8,8 @@ import os
 import argparse
 import socket
 import errno
+
+_is_steam_build = os.environ.get("IS_STEAM_BUILD", "0") == "1"
 from py.cli_tool import read_file_tool_local
 from py.task_tools import query_task_progress
 from py.ws_manager import ws_manager
@@ -966,6 +968,20 @@ async def cors_options_workaround(request: Request, call_next):
         )
     return await call_next(request)
 
+@app.middleware("http")
+async def inject_steam_build_flag(request: Request, call_next):
+    response = await call_next(request)
+    if _is_steam_build and "text/html" in response.headers.get("content-type", ""):
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+        body_str = body.decode("utf-8")
+        body_str = body_str.replace("</head>", '<script>window.__IS_STEAM_BUILD__=true;</script></head>')
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        return HTMLResponse(content=body_str, status_code=response.status_code, headers=headers)
+    return response
+
 async def t(text: str) -> str:
     global locales
     settings = await load_settings()
@@ -1100,7 +1116,6 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
     from py.utility_tools import time
     # ==================== 1. 定义工具映射表 ====================
     _TOOL_HOOKS = {
-        "DDGsearch": DDGsearch,
         "searxng": searxng,
         "Tavily_search": Tavily_search,
         "query_knowledge_base": query_knowledge_base,
@@ -1112,7 +1127,6 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
         "agent_tool_call": agent_tool_call,
         "a2a_tool_call": a2a_tool_call,
         "custom_llm_tool": custom_llm_tool,
-        "pollinations_image":pollinations_image,
         "get_file_content":get_file_content,
         "get_image_content": get_image_content,
         "e2b_code": e2b_code,
@@ -1209,6 +1223,10 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
         "update_workspace_settings":update_workspace_settings,
         "acpx_agent":acpx_agent,
     }
+
+    if not _is_steam_build:
+        _TOOL_HOOKS["DDGsearch"] = DDGsearch
+        _TOOL_HOOKS["pollinations_image"] = pollinations_image
     
     # ==================== 3. 权限拦截逻辑 (Human-in-the-loop) ====================
     # 定义受控的敏感工具列表
@@ -3485,7 +3503,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
         if settings["tools"]["arxiv"]['enabled']:
             tools.append(arxiv_tool)
         if settings['text2imgSettings']['enabled']:
-            if settings['text2imgSettings']['engine'] == 'pollinations':
+            if settings['text2imgSettings']['engine'] == 'pollinations' and not _is_steam_build:
                 tools.append(pollinations_image_tool)
             elif settings['text2imgSettings']['engine'] == 'openai':
                 tools.append(openai_image_tool)
@@ -3919,7 +3937,7 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                             }
                             yield f"data: {json.dumps(tool_chunk)}\n\n"
                     if settings['webSearch']['when'] == 'after_thinking' or settings['webSearch']['when'] == 'both':
-                        if settings['webSearch']['engine'] == 'duckduckgo':
+                        if settings['webSearch']['engine'] == 'duckduckgo' and not _is_steam_build:
                             tools.append(duckduckgo_tool)
                         elif settings['webSearch']['engine'] == 'searxng':
                             tools.append(searxng_tool)
@@ -5661,7 +5679,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
     if settings["tools"]["arxiv"]['enabled']:
         tools.append(arxiv_tool)
     if settings['text2imgSettings']['enabled']:
-        if settings['text2imgSettings']['engine'] == 'pollinations':
+        if settings['text2imgSettings']['engine'] == 'pollinations' and not _is_steam_build:
             tools.append(pollinations_image_tool)
         elif settings['text2imgSettings']['engine'] == 'openai':
             tools.append(openai_image_tool)
@@ -5919,7 +5937,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                 if results:
                     content_append(request.messages, 'user',  f"\n\n联网搜索结果：{results}")
             if settings['webSearch']['when'] == 'after_thinking' or settings['webSearch']['when'] == 'both':
-                if settings['webSearch']['engine'] == 'duckduckgo':
+                if settings['webSearch']['engine'] == 'duckduckgo' and not _is_steam_build:
                     tools.append(duckduckgo_tool)
                 elif settings['webSearch']['engine'] == 'searxng':
                     tools.append(searxng_tool)
@@ -5938,7 +5956,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                 elif settings['webSearch']['crawler'] == 'bochaai':
                     tools.append(bochaai_tool)
 
-                if settings['webSearch']['crawler'] == 'jina':
+                if settings['webSearch']['crawler'] == 'jina' and not _is_steam_build:
                     tools.append(jina_crawler_tool)
                 elif settings['webSearch']['crawler'] == 'crawl4ai':
                     tools.append(Crawl4Ai_tool)
@@ -8321,6 +8339,8 @@ async def text_to_speech(request: Request):
         # 1. EdgeTTS 引擎
         # ==========================================
         if tts_engine == 'edgetts':
+            if _is_steam_build:
+                return JSONResponse({"error": "EdgeTTS is not available in this build"}, status_code=403)
             edgettsLanguage = tts_settings.get('edgettsLanguage', 'zh-CN')
             edgettsVoice = tts_settings.get('edgettsVoice', 'XiaoyiNeural')
             rate = tts_settings.get('edgettsRate', 1.0)

@@ -1,0 +1,32 @@
+Font Awesome Free 6.7.2
+========================
+
+Copyright (c) 2024 Fonticons, Inc. (https://fontawesome.com)
+
+This project bundles and distributes Font Awesome Free. Font Awesome Free is
+free, open source, and GPL friendly. Full license: https://fontawesome.com/license/free
+
+---- License Components ----
+
+Icons:   CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Fonts:   SIL OFL 1.1 (https://scripts.sil.org/OFL)
+Code:    MIT (https://opensource.org/licenses/MIT)
+
+---- Attribution (required by CC BY 4.0, SIL OFL 1.1, and MIT) ----
+
+The bundled files in static/fontawesome/ retain their embedded attribution
+comments as distributed by Fonticons, Inc. No attribution metadata has been
+removed from any Font Awesome file.
+
+Attribution to the original work:
+  Name:    Font Awesome Free
+  Author:  Fonticons, Inc. (https://fontawesome.com)
+  License: CC BY 4.0 / SIL OFL 1.1 / MIT
+  Version: 6.7.2
+
+---- Brand Icons Notice ----
+
+All brand icons are trademarks of their respective owners. The use of these
+trademarks does not indicate endorsement of the trademark holder by Font
+Awesome, nor vice versa. Please do not use brand logos for any purpose except
+to represent the company, product, or service to which they refer.

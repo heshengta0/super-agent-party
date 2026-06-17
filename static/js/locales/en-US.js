@@ -66,6 +66,7 @@ window.lang_enUS = {
         'searxngURLPlaceholder': 'SearXNG URL (docker deployment exposed port)',
         'tavilyAPIKeyPlaceholder': 'Tavily API Key',
         'jinaAPIKeyPlaceholder': 'Jina API Key (optional)',
+        'jinaAPIKeyPlaceholderRequired': 'Jina API Key',
         'crawl4AiURLPlaceholder': 'Crawl4Ai url (docker deployment exposed port)',
         'crawl4AiAPIKeyPlaceholder': 'Crawl4Ai API Key (optional)',
         'comfyuiAPIKey': 'ComfyUI API Key (optional)',
