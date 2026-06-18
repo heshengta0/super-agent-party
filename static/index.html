@@ -10282,7 +10282,6 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <el-option label="DuckDuckGo" value="duckduckgo" v-if="!isSteamBuild" ></el-option>
                           <el-option label="SearXNG" value="searxng" ></el-option>
                           <el-option label="Tavily" value="tavily" ></el-option>
-                          <el-option label="Bing" value="bing" ></el-option>
                           <el-option label="Google" value="google" ></el-option>
                           <el-option label="Brave" value="brave" ></el-option>
                           <el-option label="Exa" value="exa" ></el-option>
@@ -10438,58 +10437,6 @@ function updateElement(el, rawMarkdown, formatFn) {
                           v-model="webSearchSettings.tavily_api_key"
                           :placeholder="t('apiKeyPlaceholder')"
                           show-password
-                          @input="autoSaveSettings"
-                          class="full-width-input"
-                        />
-                      </el-form-item>
-                    </div>
-                  </div>
-                  <!-- Bing 配置块 -->
-                  <div class="tool-item" v-show="webSearchSettings.engine === 'bing'">
-                    <div class="tool-header">
-                      <div class="header-left">
-                        <span>
-                          <el-icon>
-                            <i class="fa-solid fa-globe"></i>
-                          </el-icon>
-                          Bing
-                          <el-link
-                            type="primary"
-                            :underline="false"
-                            href="https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/create-bing-search-service-resource"
-                            target="_blank"
-                          >
-                            <el-icon class="mr-1">
-                              <i class="fa-solid fa-key"></i>
-                            </el-icon>{{ t('gotoAPI') }}
-                          </el-link>
-                        </span>
-                      </div>
-                    </div>
-                    <div class="tool-content">
-                      <el-form-item :label="t('resultCount')" class="form-item-align">
-                        <el-slider
-                          v-model="webSearchSettings.bing_max_results"
-                          :min="1"
-                          :max="20"
-                          :step="1"
-                          show-input
-                          @input="autoSaveSettings"
-                        />
-                      </el-form-item>
-                      <el-form-item :label="t('apiKey')" class="form-item-align">
-                        <el-input
-                          v-model="webSearchSettings.bing_api_key"
-                          :placeholder="t('apiKeyPlaceholder')"
-                          show-password
-                          @input="autoSaveSettings"
-                          class="full-width-input"
-                        />
-                      </el-form-item>
-                      <el-form-item :label="t('searchEndpoint')" class="form-item-align">
-                        <el-input
-                          v-model="webSearchSettings.bing_search_url"
-                          placeholder="https://api.bing.microsoft.com/v7.0/search"
                           @input="autoSaveSettings"
                           class="full-width-input"
                         />

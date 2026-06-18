@@ -18628,10 +18628,6 @@ closeTaskCenter() {
         case 'tavily':
           if (!settings.tavily_api_key?.trim()) errorMsg = this.t('pleaseConfigTavilyApiKey');
           break;
-        case 'bing':
-          if (!settings.bing_api_key?.trim()) errorMsg = this.t('pleaseConfigBingApiKey');
-          else if (!settings.bing_search_url?.trim()) errorMsg = this.t('pleaseConfigBingSearchUrl');
-          break;
         case 'google':
           if (!settings.google_api_key?.trim()) errorMsg = this.t('pleaseConfigGoogleApiKey');
           else if (!settings.google_cse_id?.trim()) errorMsg = this.t('pleaseConfigGoogleCseId');

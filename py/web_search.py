@@ -241,49 +241,6 @@ tavily_tool = {
         },
     },
 }
-
-from langchain_community.utilities import BingSearchAPIWrapper
-
-async def Bing_search(query):
-    settings = await load_settings()
-    def sync_search():
-        max_results = settings['webSearch']['bing_max_results'] or 10
-        try:
-            api_key = settings['webSearch'].get('bing_api_key', "")
-            bing_search_url = settings['webSearch'].get('bing_search_url', "")
-            client = BingSearchAPIWrapper(bing_subscription_key=api_key,bing_search_url=bing_search_url)
-            response = client.results(query=query,num_results=max_results)
-            return json.dumps(response, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Bing search error: {e}")
-            return ""
-
-    try:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, sync_search)
-    except Exception as e:
-        print(f"Async execution error: {e}")
-        return ""
-
-
-bing_tool = {
-    "type": "function",
-    "function": {
-        "name": "Bing_search",
-        "description": "通过Bing搜索API获取网络信息。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "需要搜索的关键词或自然语言查询语句",
-                }
-            },
-            "required": ["query"],
-        },
-    }
-}
-
 from langchain_google_community import GoogleSearchAPIWrapper
 
 async def Google_search(query):

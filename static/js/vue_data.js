@@ -356,7 +356,7 @@ let vue_data = {
       when: 'after_thinking',
       duckduckgo_max_results: 10, // 默认值
       searxng_url: `http://127.0.0.1:8080`,
-      searxng_engines: "baidu,bing,sogou,360search,quark",
+      searxng_engines: "baidu,sogou,360search,quark",
       searxng_is_select:false,
       searxng_max_results: 10, // 默认值
       tavily_max_results: 10, // 默认值
@@ -364,9 +364,6 @@ let vue_data = {
       jina_api_key: '',
       Crawl4Ai_url: 'http://127.0.0.1:11235',
       Crawl4Ai_api_key: 'test_api_code',
-      bing_max_results: 10, // 默认值
-      bing_api_key: '',
-      bing_search_url: 'https://api.bing.microsoft.com/v7.0/search',
       google_max_results: 10, // 默认值
       google_api_key: '',
       google_cse_id: '',

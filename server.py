@@ -18,10 +18,10 @@ from py.ws_manager import ws_manager
 
 # === Pre-load heavy tool modules at startup to avoid blocking first request ===
 from py.web_search import (
-    DDGsearch, searxng, Tavily_search, Bing_search, Google_search,
+    DDGsearch, searxng, Tavily_search, Google_search,
     Brave_search, Exa_search, Serper_search, bochaai_search,
     jina_crawler, Crawl4Ai_search, firecrawl_search, simple_fetch, markdown_new,
-    duckduckgo_tool, searxng_tool, tavily_tool, bing_tool, google_tool,
+    duckduckgo_tool, searxng_tool, tavily_tool, google_tool,
     brave_tool, exa_tool, serper_tool, bochaai_tool,
     jina_crawler_tool, simple_fetch_tool, Crawl4Ai_tool, firecrawl_tool, markdown_new_tool,
 )
@@ -1143,7 +1143,6 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict,is_sub
         "local_run_code": local_run_code,
         "openai_image": openai_image,
         "openai_chat_image":openai_chat_image,
-        "Bing_search": Bing_search,
         "Google_search": Google_search,
         "Brave_search": Brave_search,
         "Exa_search": Exa_search,
@@ -3924,8 +3923,6 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                             results = await searxng(user_prompt)
                         elif settings['webSearch']['engine'] == 'tavily':
                             results = await Tavily_search(user_prompt)
-                        elif settings['webSearch']['engine'] == 'bing':
-                            results = await Bing_search(user_prompt)
                         elif settings['webSearch']['engine'] == 'google':
                             results = await Google_search(user_prompt)
                         elif settings['webSearch']['engine'] == 'brave':
@@ -3953,8 +3950,6 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                             tools.append(searxng_tool)
                         elif settings['webSearch']['engine'] == 'tavily':
                             tools.append(tavily_tool)
-                        elif settings['webSearch']['engine'] == 'bing':
-                            tools.append(bing_tool)
                         elif settings['webSearch']['engine'] == 'google':
                             tools.append(google_tool)
                         elif settings['webSearch']['engine'] == 'brave':
@@ -5944,8 +5939,6 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                     results = await searxng(user_prompt)
                 elif settings['webSearch']['engine'] == 'tavily':
                     results = await Tavily_search(user_prompt)
-                elif settings['webSearch']['engine'] == 'bing':
-                    results = await Bing_search(user_prompt)
                 elif settings['webSearch']['engine'] == 'google':
                     results = await Google_search(user_prompt)
                 elif settings['webSearch']['engine'] == 'brave':
@@ -5965,8 +5958,6 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                     tools.append(searxng_tool)
                 elif settings['webSearch']['engine'] == 'tavily':
                     tools.append(tavily_tool)
-                elif settings['webSearch']['engine'] == 'bing':
-                    tools.append(bing_tool)
                 elif settings['webSearch']['engine'] == 'google':
                     tools.append(google_tool)
                 elif settings['webSearch']['engine'] == 'brave':
