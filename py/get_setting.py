@@ -462,8 +462,7 @@ def _migrate_old_tha_models():
             continue
         # 检查是否包含 THA 模型文件
         onnx_file = os.path.join(entry_path, "model.onnx")
-        char_file = os.path.join(entry_path, "character.png")
-        if os.path.exists(onnx_file) and os.path.exists(char_file):
+        if os.path.exists(onnx_file):
             dest = os.path.join(target_dir, entry)
             if not os.path.exists(dest):
                 try:

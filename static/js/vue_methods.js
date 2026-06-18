@@ -11097,7 +11097,7 @@ processMarkdownStreamForTTS(message, deltaText, isFinal = false) {
 
   async uploadTHAModel() {
     if (!this.newThaModel.file) {
-      showNotification('请先选择THA模型ZIP文件', 'error');
+      showNotification('请先选择ONNX模型文件', 'error');
       return;
     }
     if (!this.newThaModel.displayName.trim()) {
@@ -11202,7 +11202,7 @@ processMarkdownStreamForTTS(message, deltaText, isFinal = false) {
   browseTHAModelFile() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.zip';
+    input.accept = '.onnx';
     input.onchange = (e) => {
       if (e.target.files.length > 0) {
         this.newThaModel.file = e.target.files[0];

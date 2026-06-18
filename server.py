@@ -8211,24 +8211,15 @@ async def tha_websocket_endpoint(websocket: WebSocket):
     tha_config = settings.get("THAConfig", {})
     selected_id = tha_config.get("selectedModelId", "Lyra")
 
-    # 1. 查找模型路径 (支持 model.mlpackage / model.onnx / model.onnx + character.png)
+    # 1. 查找模型路径
     model_path = None
-    char_path = None
     default_dir = os.path.join(base_path, "tha_models")
     for entry in os.listdir(default_dir):
         entry_path = os.path.join(default_dir, entry)
         if os.path.isdir(entry_path) and entry == selected_id:
-            mlp = os.path.join(entry_path, "model.mlpackage")
             mp = os.path.join(entry_path, "model.onnx")
-            cp = os.path.join(entry_path, "character.png")
-
-            if os.path.isdir(mlp):
-                model_path = mlp
-                char_path = cp if os.path.exists(cp) else None
-                break
-            elif os.path.exists(mp):
+            if os.path.exists(mp):
                 model_path = mp
-                char_path = cp if os.path.exists(cp) else None
                 break
 
     if not model_path:
@@ -8236,17 +8227,9 @@ async def tha_websocket_endpoint(websocket: WebSocket):
         for entry in os.listdir(user_dir):
             entry_path = os.path.join(user_dir, entry)
             if os.path.isdir(entry_path) and entry == selected_id:
-                mlp = os.path.join(entry_path, "model.mlpackage")
                 mp = os.path.join(entry_path, "model.onnx")
-                cp = os.path.join(entry_path, "character.png")
-
-                if os.path.isdir(mlp):
-                    model_path = mlp
-                    char_path = cp if os.path.exists(cp) else None
-                    break
-                elif os.path.exists(mp):
+                if os.path.exists(mp):
                     model_path = mp
-                    char_path = cp if os.path.exists(cp) else None
                     break
 
     if not model_path:
@@ -8256,7 +8239,7 @@ async def tha_websocket_endpoint(websocket: WebSocket):
         return
 
     try:
-        engine = get_engine(model_path, char_path)
+        engine = get_engine(model_path)
         gen = THAPoseGenerator()
 
         await tts_manager.connect_tha(websocket)
@@ -10910,25 +10893,17 @@ async def upload_tha_model(
 ):
     from py.tha_engine import THAModelManager
 
-    filename = file.filename or ""
-    file_extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ""
-
-    if file_extension not in ('zip', 'onnx'):
+    file_extension = file.filename.split('.')[-1].lower()
+    if file_extension != 'onnx':
         return JSONResponse(
             status_code=400,
-            content={"success": False, "message": "只支持 .zip 或 .onnx 格式的 THA 模型"}
+            content={"success": False, "message": "只支持.onnx格式的THA模型文件"}
         )
 
     try:
+        onnx_data = await file.read()
         manager = THAModelManager(DEFAULT_THA_DIR, THA_USER_MODELS_DIR)
-
-        if file_extension == 'zip':
-            zip_data = await file.read()
-            success, msg, info = manager.install_zip(zip_data, display_name)
-        else:
-            # 单文件 .onnx 安装（baked 模型，无需 character.png）
-            onnx_data = await file.read()
-            success, msg, info = manager.install_file(onnx_data, display_name, "onnx")
+        success, msg, info = manager.install_onnx(onnx_data, display_name)
 
         if success:
             return JSONResponse(content={

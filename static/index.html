@@ -10234,13 +10234,13 @@ function updateElement(el, rawMarkdown, formatFn) {
                         <!-- 
                           隐藏的原生文件输入框 
                           ref="skillFileInput": 用于 JS 找到它
-                          accept=".zip": 限制文件类型
+                          accept=".onnx": 限制文件类型
                           @change: 选中文件后触发
                         -->
                         <input 
                           type="file" 
                           ref="skillFileInput" 
-                          accept=".zip" 
+                          accept=".onnx" 
                           style="display: none" 
                           @change="handleSkillFileChange"
                         >
@@ -16900,7 +16900,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                     <input
                       ref="zipInput"
                       type="file"
-                      accept=".zip"
+                      accept=".onnx"
                       style="display: none"
                       @change="onZipSelected"
                     ></input>
