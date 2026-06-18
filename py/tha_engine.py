@@ -29,6 +29,11 @@ def _srgb_to_linear(x):
     return np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4)
 
 
+def _linear_to_srgb(x):
+    x = np.clip(x, 0, 1)
+    return np.where(x <= 0.0031308, x * 12.92, 1.055 * (x ** (1.0 / 2.4)) - 0.055)
+
+
 # ------------------------------------------------------------
 # 2. 情感 -> 45维姿态参数映射表
 # ------------------------------------------------------------
@@ -497,19 +502,29 @@ class CoreMLTHAEngine:
         else:
             blended = [v for k, v in result.items() if k != "pose"][0]
 
-        # blended: (1, 4, 512, 512) float32 [-1, 1] 或 (1, 3, 512, 512) uint8
+        # blended: (1, 4, 512, 512) float32 [-1, 1] linear RGBA premultiplied
         img_data = blended[0]
         C = img_data.shape[0]
         _clip = np.clip
 
         if C == 4:
-            # RGBA float32 [-1,1] → 绿幕合成
-            rgb = img_data[:3, :, :]
-            alpha = img_data[3, :, :]
-            rgb = (rgb + 1.0) * 127.5
+            rgb = img_data[:3, :, :]       # (3, 512, 512) linear, premultiplied
+            alpha = img_data[3, :, :]       # (512, 512)
+
+            # [-1,1] → [0,1]
+            rgb = (rgb + 1.0) * 0.5
             alpha = (alpha + 1.0) * 0.5
-            alpha = alpha[np.newaxis, :, :]
-            result = rgb * alpha + self.green_bg * (1.0 - alpha)
+
+            # Un-premultiply
+            safe_a = np.where(alpha > 1e-6, alpha, 1.0)
+            rgb = rgb / safe_a[np.newaxis, :, :]
+
+            # Linear → sRGB
+            rgb = _linear_to_srgb(_clip(rgb, 0, 1))
+
+            # Composite on green background
+            alpha_a = alpha[np.newaxis, :, :]
+            result = (rgb * 255.0) * alpha_a + self.green_bg * (1.0 - alpha_a)
             result = _clip(result, 0, 255).astype(np.uint8)
         elif C == 3:
             if img_data.dtype == np.uint8:
