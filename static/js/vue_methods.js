@@ -11202,7 +11202,7 @@ processMarkdownStreamForTTS(message, deltaText, isFinal = false) {
   browseTHAModelFile() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.onnx';
+    input.accept = '.onnx,.zip';
     input.onchange = (e) => {
       if (e.target.files.length > 0) {
         this.newThaModel.file = e.target.files[0];

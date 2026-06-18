@@ -514,15 +514,64 @@ class THAModelManager:
             shutil.rmtree(target_dir)
             return False, f"安装失败: {str(e)}", {}
 
+    def install_mlpackage(self, zip_data: bytes, display_name: str) -> Tuple[bool, str, dict]:
+        """安装用户上传的 CoreML mlpackage ZIP 包"""
+        import shutil, zipfile, io
+        safe_name = display_name.strip().replace(" ", "_")
+        if not safe_name:
+            safe_name = f"model_{uuid.uuid4().hex[:8]}"
+
+        target_dir = os.path.join(self.user_upload_dir, safe_name)
+        abs_target = os.path.abspath(target_dir)
+        abs_user_dir = os.path.abspath(self.user_upload_dir)
+        if not abs_target.startswith(abs_user_dir + os.sep) and abs_target != abs_user_dir:
+            return False, "非法的模型目录路径", {}
+
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir)
+        os.makedirs(target_dir, exist_ok=True)
+
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_data), 'r') as zf:
+                zf.extractall(target_dir)
+
+            # Find .mlpackage directory
+            mlpkg_found = False
+            for root, dirs, files in os.walk(target_dir):
+                for d in dirs:
+                    if d.endswith('.mlpackage'):
+                        mlpkg_found = True
+                        break
+                if mlpkg_found:
+                    break
+
+            if not mlpkg_found:
+                shutil.rmtree(target_dir)
+                return False, "ZIP 中未找到 .mlpackage 目录", {}
+
+            return True, "安装成功", {
+                "id": safe_name,
+                "name": display_name,
+                "type": "user"
+            }
+        except zipfile.BadZipFile:
+            shutil.rmtree(target_dir)
+            return False, "无效的ZIP文件", {}
+        except Exception as e:
+            shutil.rmtree(target_dir)
+            return False, f"安装失败: {str(e)}", {}
+
     def delete_model(self, model_id: str) -> bool:
         target_dir = os.path.join(self.user_upload_dir, model_id)
         abs_target = os.path.abspath(target_dir)
         abs_user_dir = os.path.abspath(self.user_upload_dir)
         # 安全检查: 确保目标目录在预期的用户上传目录内，且不是根目录
         if os.path.exists(target_dir) and os.path.isdir(target_dir) and (abs_target.startswith(abs_user_dir + os.sep) or abs_target == abs_user_dir + os.sep + model_id):
-            # 额外检查: 确保目录包含 THA 模型文件(model.onnx)，防止误删非THA目录
+            # 额外检查: 确保目录包含 THA 模型文件，防止误删非THA目录
             onnx_path = os.path.join(target_dir, "model.onnx")
-            if not os.path.exists(onnx_path):
+            mlpkg_paths = list(Path(target_dir).rglob("*.mlpackage"))
+            if not os.path.exists(onnx_path) and not mlpkg_paths:
+                return False
                 return False
             import shutil
             shutil.rmtree(target_dir)
