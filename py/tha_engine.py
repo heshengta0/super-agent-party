@@ -19,7 +19,15 @@ from typing import Optional, Dict, Tuple
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------
-# 1. 情感 -> 45维姿态参数映射表
+# 1. sRGB -> Linear（非 baked 模型纹理预处理用）
+# ------------------------------------------------------------
+def _srgb_to_linear(x):
+    x = np.clip(x, 0, 1)
+    return np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4)
+
+
+# ------------------------------------------------------------
+# 2. 情感 -> 45维姿态参数映射表
 # ------------------------------------------------------------
 EMOTION_POSE_MAP: Dict[str, np.ndarray] = {}
 
@@ -287,9 +295,11 @@ def _get_mouth_pose() -> np.ndarray:
 class THAEngine:
     def __init__(self, model_path: str, character_path: str = None):
         self.session: Optional[ort.InferenceSession] = None
+        self.image_np: Optional[np.ndarray] = None
         self._loaded = False
+        self._baked = True  # default baked; auto-detected in load()
         self.model_path = model_path
-        # character_path kept for backward compat, no longer required
+        # character_path kept for backward compat (non-baked models)
         self.character_path = character_path
 
         # 🌟 优化：预分配不变量，避免循环重复分配内存带来的 GC 压力
@@ -347,17 +357,29 @@ class THAEngine:
             self.session = ort.InferenceSession(self.model_path, sess_opts, providers=["CPUExecutionProvider"])
             
         active_provider = self.session.get_providers()[0]
-        
+
+        # ── 检测是否 baked（单输入 pose）──
+        input_names = [i.name for i in self.session.get_inputs()]
+        self._baked = "image" not in input_names
+
         print(f"\n🚀 [THA] ===============================================")
         print(f"🚀 [THA] 检测到前端加载请求，2D 引擎成功初始化!")
         print(f"🚀 [THA] 模型文件: {os.path.basename(self.model_path)}")
+        print(f"🚀 [THA] 模型格式: {'baked (单 pose 输入)' if self._baked else 'standard (image+pose)'}")
         print(f"🚀 [THA] 激活的硬件加速后端: \033[1;32m{active_provider}\033[0m")
         print(f"🚀 [THA] ===============================================\n")
-        
-        logger.info(f"[THA] Active Provider: {active_provider}")
-        logger.info(f"[THA] Model: {self.model_path}")
 
-        # texture is baked into the ONNX model — no separate image preprocessing needed
+        # ── 加载纹理 (baked 模型不需要) ──
+        if not self._baked:
+            if not self.character_path or not os.path.exists(self.character_path):
+                raise FileNotFoundError(f"Character texture not found: {self.character_path}")
+            from PIL import Image
+            img = np.array(Image.open(self.character_path).convert("RGBA"), dtype=np.float32) / 255.0
+            img[:, :, :3] = _srgb_to_linear(img[:, :, :3])
+            img[:, :, :3] *= img[:, :, 3:4]
+            img = img * 2.0 - 1.0
+            self.image_np = np.expand_dims(img.transpose(2, 0, 1), 0).astype(np.float32)
+
         self._loaded = True
 
     def render(self, pose: np.ndarray) -> bytes:
@@ -366,7 +388,10 @@ class THAEngine:
             self.load()
 
         p = pose.reshape(1, 45).astype(np.float32)
-        out = self.session.run(None, {"pose": p})[0]
+        if self._baked:
+            out = self.session.run(None, {"pose": p})[0]
+        else:
+            out = self.session.run(None, {"image": self.image_np, "pose": p})[0]
         img_data = out[0]  # (C, 512, 512)  CHW
 
         C = img_data.shape[0]
