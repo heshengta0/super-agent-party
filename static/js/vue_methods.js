@@ -19758,6 +19758,13 @@ gotoAddExtension(){
       showNotification(this.t('bgRemovedSuccess'), 'success');
     },
 
+    onShowDisclaimerChange(val) {
+      if (val) {
+        this.systemSettings.disclaimerAccepted = false;
+      }
+      this.autoSaveSettings();
+    },
+
     acceptDisclaimer() {
       this.showDisclaimerDialog = false;
       if (isSteamBuild) { return; }

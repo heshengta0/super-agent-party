@@ -70,7 +70,8 @@ def fetch_url(url: str) -> str:
 
 
 def fetch_konsheng_vocabulary() -> set:
-    """Try to download konsheng's vocabulary .txt files from the main zip."""
+    """Download konsheng's Sensitive-lexicon zip and extract all .txt files from
+    Vocabulary/ and Organized/ directories."""
     words = set()
     zip_url = "https://github.com/konsheng/Sensitive-lexicon/archive/refs/heads/main.zip"
     zip_path = TEMP_DIR / "konsheng.zip"
@@ -84,42 +85,21 @@ def fetch_konsheng_vocabulary() -> set:
                 if info.is_dir():
                     continue
                 name_lower = info.filename.lower()
-                if "/vocabulary/" in name_lower and name_lower.endswith(".txt"):
-                    try:
-                        text = zf.read(info).decode("utf-8", errors="ignore")
-                    except:
-                        text = zf.read(info).decode("gbk", errors="ignore")
-                    for line in text.splitlines():
-                        w = line.strip().lower()
-                        if w and len(w) >= 2 and not w.startswith("#") and not w.startswith("//"):
-                            words.add(w)
+                if not name_lower.endswith(".txt"):
+                    continue
+                if "/vocabulary/" not in name_lower and "/organized/" not in name_lower:
+                    continue
+                try:
+                    text = zf.read(info).decode("utf-8", errors="ignore")
+                except Exception:
+                    text = zf.read(info).decode("gbk", errors="ignore")
+                for line in text.splitlines():
+                    w = line.strip().lower()
+                    if w and len(w) >= 2 and not w.startswith("#") and not w.startswith("//"):
+                        words.add(w)
         shutil.rmtree(zip_path.parent, ignore_errors=True)
     except Exception as e:
         print(f"  WARN: failed to fetch konsheng vocabulary: {e}")
-    return words
-
-
-def fetch_konsheng_organized() -> set:
-    """Try to download konsheng's Organized .txt files."""
-    words = set()
-    # Try fetching individual known files
-    known_files = [
-        "色情词汇.txt", "敏感时政类.txt", "敏感词汇总.txt", "暴恐词库.txt",
-        "政治类词库.txt", "贪腐词汇.txt", "广告.txt", "第三方词库-Tencent.txt",
-        "GFW敏感词.txt",
-    ]
-    base_url = "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/main/Organized/"
-    for fname in known_files:
-        try:
-            encoded = urllib.parse.quote(fname, safe="")
-            url = base_url + encoded
-            text = fetch_url(url)
-            for line in text.splitlines():
-                w = line.strip().lower()
-                if w and len(w) >= 2 and not w.startswith("#"):
-                    words.add(w)
-        except Exception:
-            pass
     return words
 
 
@@ -132,7 +112,6 @@ def main():
     # --- Chinese (konsheng) ---
     print("\n[1/4] Chinese: konsheng/Sensitive-lexicon...")
     zh_words = fetch_konsheng_vocabulary()
-    zh_words |= fetch_konsheng_organized()
     print(f"  -> {len(zh_words):,} words")
 
     # --- Also fetch TrChat JSON for Chinese ---
