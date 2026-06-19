@@ -783,7 +783,9 @@ async def lifespan(app: FastAPI):
         logger.handlers.clear()
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    file_handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
+    # buffering=1 forces line-buffered mode so each record is written to disk immediately
+    _log_file = open(log_path, mode='a', buffering=1, encoding='utf-8')
+    file_handler = logging.StreamHandler(_log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     console_handler = logging.StreamHandler()
@@ -803,7 +805,11 @@ async def lifespan(app: FastAPI):
                     logger.log(self._level, line)
             return len(msg)
         def flush(self):
-            pass
+            if self._buf.strip():
+                logger.log(self._level, self._buf)
+                self._buf = ""
+            for h in logger.handlers:
+                h.flush()
 
     sys.stdout = _StreamToLogger(logging.INFO)
     sys.stderr = _StreamToLogger(logging.WARNING)
