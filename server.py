@@ -779,14 +779,20 @@ async def lifespan(app: FastAPI):
     timestamp = time.time()
     log_path = os.path.join(LOG_DIR, f"backend_{timestamp}.log")
     logger = logging.getLogger("app")
-    if not logger.handlers:
-        logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-        logger.addHandler(handler)
+    if logger.hasHandlers():
+        logger.handlers.clear()
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    file_handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
     logger.info("===== 日志系统初始化成功 =====")
     logger.info(f"用户数据目录: {USER_DATA_DIR}")
     logger.info(f"设置数据库路径: {DATABASE_PATH}")
+    logger.info(f"日志文件路径: {log_path}")
 
     # --- [代理与 HTTP 客户端初始化] ---
     proxy_url = None
