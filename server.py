@@ -789,6 +789,25 @@ async def lifespan(app: FastAPI):
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+
+    class _StreamToLogger(io.TextIOBase):
+        """Redirect print() output into the log file."""
+        def __init__(self, level=logging.INFO):
+            self._level = level
+            self._buf = ""
+        def write(self, msg):
+            self._buf += msg
+            while "\n" in self._buf:
+                line, self._buf = self._buf.split("\n", 1)
+                if line.strip():
+                    logger.log(self._level, line)
+            return len(msg)
+        def flush(self):
+            pass
+
+    sys.stdout = _StreamToLogger(logging.INFO)
+    sys.stderr = _StreamToLogger(logging.WARNING)
+
     logger.info("===== 日志系统初始化成功 =====")
     logger.info(f"用户数据目录: {USER_DATA_DIR}")
     logger.info(f"设置数据库路径: {DATABASE_PATH}")
