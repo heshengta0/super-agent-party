@@ -18772,7 +18772,10 @@ closeTaskCenter() {
           this.CLISettings.enabled = false;
         });
 
-        // 3. 拦截执行，直接 return，不触发后续的保存
+        // 3. 跳转到 CLI 配置页面，让用户填入工作区路径
+        this.jumpToCLIConfig();
+
+        // 4. 拦截执行，直接 return，不触发后续的保存
         return; 
       }
     }
