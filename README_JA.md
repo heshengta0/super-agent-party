@@ -359,9 +359,7 @@ chmod +x 一键更新(update).sh 一键启动(start).sh
     <img src="doc/image/Q群2.jpg" style="width: 48%;" />
 </div>
 
-2. WeChatグループ：`we_glm`（アシスタントのWeChatを追加してグループに参加）
-
-3. Discord：[Discordリンク](https://discord.gg/f2dsAKKr2V)
+2. Discord：[Discordリンク](https://discord.gg/f2dsAKKr2V)
 
 ## コントリビューター
 

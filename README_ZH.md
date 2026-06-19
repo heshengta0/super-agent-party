@@ -393,9 +393,7 @@ docker-compose -f docker-compose-acr.yml up -d
     <img src="doc/image/Q群2.jpg" style="width: 48%;" />
 </div>
 
-2. 微信群：`we_glm`（添加小助手微信后进群）
-
-3. discord:[discord链接](https://discord.gg/f2dsAKKr2V)
+2. discord:[discord链接](https://discord.gg/f2dsAKKr2V)
 
 ## 贡献者  
 

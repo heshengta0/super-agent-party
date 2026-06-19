@@ -388,9 +388,7 @@ If you have any questions or issues with the project, you are welcome to join ou
     <img src="doc/image/Q群2.jpg" style="width: 48%;" />
 </div>
 
-2. WeChat Group: `we_glm` (add the assistant's WeChat and join the group)
-
-3. Discord: [Discord link](https://discord.gg/f2dsAKKr2V)
+2. Discord: [Discord link](https://discord.gg/f2dsAKKr2V)
 
 ## Contributors  
 
