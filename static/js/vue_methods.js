@@ -1410,7 +1410,7 @@ formatMessage(content, index) {
       // LaTeX 公式保护机制
       // 防止公式内部的 < 和 > 被后续的 HTML 标签过滤正则误杀
       // ============================================================
-      formatted = formatted.replace(/\s\s([\s\S]*?)(?:\s\s|$)|\$([^\$\n]+)\$/g, function(match) {
+      formatted = formatted.replace(/\$\$([\s\S]*?)(?:\$\$|$)|\$([^\$\n]+)\$/g, function(match) {
         return match.replace(/</g, '\\lt ').replace(/>/g, '\\gt ');
       });
 
@@ -3925,9 +3925,23 @@ formatMessage(content, index) {
 
         // 【维度二：位置退级判定】（默认兜底）
         // 在标准的单路流式输出中，最新、且正在接收流式数据的块，必然是 displayBlocks 中的最后一个元素
-        const isLast = msg.displayBlocks && (blockIndex === msg.displayBlocks.length - 1);
-        
-        return isLast;
+        const blocks = msg.displayBlocks;
+        if (!blocks) return false;
+        if (blockIndex === blocks.length - 1) return true;
+
+        // 【维度三：工具块滞后保护】
+        // 流式输出中，文本块可能先于工具块完成，导致仍在执行中的工具块
+        // 被后续已完成的文本块"挤"到倒数第二个位置而被错误折叠。
+        // 对于工具类块（tool_call/tool_result/reasoning），如果它是整个数组中
+        // 最后一个工具类块，则仍应视为活跃状态。
+        if (this.isToolBlock(block)) {
+            for (let i = blocks.length - 1; i > blockIndex; i--) {
+                if (this.isToolBlock(blocks[i])) return false;
+            }
+            return true;
+        }
+
+        return false;
     },
 
     // 2. 统一控制哪些块应该展开，哪些块应该折叠
@@ -4298,7 +4312,14 @@ formatMessage(content, index) {
           signal: abortController.signal
         });
 
-        if (!response.ok) throw new Error('Translation failed');
+        if (!response.ok) {
+          let errMsg = 'Translation failed';
+          try {
+            const errData = await response.json();
+            errMsg = errData?.error?.message || errMsg;
+          } catch (e) {}
+          throw new Error(errMsg);
+        }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -13904,7 +13925,14 @@ isTargetPlatform(behavior, platformKey) {
         signal: controller.signal
       });
 
-      if (!res.ok) throw new Error('Network error');
+      if (!res.ok) {
+        let errMsg = 'Network error';
+        try {
+          const errData = await res.json();
+          errMsg = errData?.error?.message || errMsg;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -14016,7 +14044,11 @@ isTargetPlatform(behavior, platformKey) {
         signal: controller.signal
       });
 
-      if (!res.ok) throw new Error('Network error');
+      if (!res.ok) {
+        let errMsg = 'Network error';
+        try { const errData = await res.json(); errMsg = errData?.error?.message || errMsg; } catch (_) {}
+        throw new Error(errMsg);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -14139,7 +14171,11 @@ isTargetPlatform(behavior, platformKey) {
         signal: controller.signal,
       });
 
-      if (!res.ok) throw new Error('Network error');
+      if (!res.ok) {
+        let errMsg = 'Network error';
+        try { const errData = await res.json(); errMsg = errData?.error?.message || errMsg; } catch (_) {}
+        throw new Error(errMsg);
+      }
       
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -14256,7 +14292,11 @@ isTargetPlatform(behavior, platformKey) {
         signal: this.abortController.signal,
       });
 
-      if (!res.ok) throw new Error('Network error');
+      if (!res.ok) {
+        let errMsg = 'Network error';
+        try { const errData = await res.json(); errMsg = errData?.error?.message || errMsg; } catch (_) {}
+        throw new Error(errMsg);
+      }
       
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -16758,7 +16798,11 @@ clearSegments() {
                 })
             });
 
-            if (!response.ok) throw new Error(`API Error: ${response.status}`);
+            if (!response.ok) {
+              let errMsg = `API Error: ${response.status}`;
+              try { const errData = await response.json(); errMsg = errData?.error?.message || errMsg; } catch (_) {}
+              throw new Error(errMsg);
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
@@ -19364,7 +19408,11 @@ async generateRandomTopic() {
       })
     });
 
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    if (!res.ok) {
+      let errMsg = `HTTP error! status: ${res.status}`;
+      try { const errData = await res.json(); errMsg = errData?.error?.message || errMsg; } catch (_) {}
+      throw new Error(errMsg);
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
@@ -19756,6 +19804,13 @@ gotoAddExtension(){
       
       // 使用 showNotification 提示删除成功
       showNotification(this.t('bgRemovedSuccess'), 'success');
+    },
+
+    onShowDisclaimerChange(val) {
+      if (val) {
+        this.systemSettings.disclaimerAccepted = false;
+      }
+      this.autoSaveSettings();
     },
 
     acceptDisclaimer() {

@@ -69,9 +69,6 @@ jobs:
           uv venv
           uv sync
 
-      - name: Fetch safety words list
-        run: python scripts/fetch_safety_words.py
-
       - name: Install Node.js dependencies
         run: npm install
 
@@ -136,9 +133,6 @@ jobs:
           pip install uv
           uv venv
           uv sync
-
-      - name: Fetch safety words list
-        run: python scripts/fetch_safety_words.py
 
       - name: Install Node.js dependencies
         run: npm install
@@ -205,9 +199,6 @@ jobs:
           uv venv
           uv sync
 
-      - name: Fetch safety words list
-        run: python scripts/fetch_safety_words.py
-
       - name: Install Node.js dependencies
         run: npm install
 
@@ -272,9 +263,6 @@ jobs:
           pip install uv
           uv venv
           uv sync
-
-      - name: Fetch safety words list
-        run: python scripts/fetch_safety_words.py
 
       - name: Install Node.js dependencies
         run: npm install

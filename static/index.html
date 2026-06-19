@@ -12393,7 +12393,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                         <el-icon><i class="fa-solid fa-triangle-exclamation"></i></el-icon>
                         {{ t('safetyDisclaimerToggle') }}
                       </span>
-                      <el-switch v-model="systemSettings.showDisclaimer" @change="autoSaveSettings" :disabled="isSteamBuild"></el-switch>
+                      <el-switch v-model="systemSettings.showDisclaimer" @change="onShowDisclaimerChange" :disabled="isSteamBuild"></el-switch>
                     </div>
                     <span class="tool-desc">{{ t('safetyDisclaimerToggleNotice') }}</span>
                   </div>

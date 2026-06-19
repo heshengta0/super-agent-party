@@ -615,7 +615,7 @@ async def get_project_skills_status(path: str):
     if not path or not os.path.exists(path):
         return {"installed_ids": [], "project_skills": []}
     
-    project_skills_dir = Path(path) / ".agent" / "skills"
+    project_skills_dir = Path(path) / ".agents" / "skills"
     if not project_skills_dir.exists():
         return {"installed_ids": [], "project_skills": []}
     
@@ -637,7 +637,7 @@ async def sync_skill_to_project(req: SkillSyncRequest):
         raise HTTPException(status_code=400, detail="项目路径无效")
 
     global_skill_path = Path(SKILLS_DIR) / req.skill_id
-    project_skills_dir = Path(req.project_path) / ".agent" / "skills"
+    project_skills_dir = Path(req.project_path) / ".agents" / "skills"
     target_path = project_skills_dir / req.skill_id
 
     if req.action == "install":

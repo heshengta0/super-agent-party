@@ -933,7 +933,7 @@ async def todo_write_tool(action: str, id: str = None, content: str = None,
     try:
         real_cwd = await _get_current_cwd()
         container_name = await get_or_create_docker_sandbox(real_cwd)
-        todo_file = "/workspace/.agent/ai_todos.json"
+        todo_file = "/workspace/.agents/ai_todos.json"
         
         # 从 Docker 容器读取任务列表
         try:
@@ -1064,7 +1064,7 @@ async def todo_write_tool(action: str, id: str = None, content: str = None,
             tmp.write(json.dumps(todos, indent=2, ensure_ascii=False))
             tmp_path = tmp.name
         
-        await _exec_docker_cmd_simple(real_cwd, ["mkdir", "-p", "/workspace/.agent"])
+        await _exec_docker_cmd_simple(real_cwd, ["mkdir", "-p", "/workspace/.agents"])
         dest = f"{container_name}:{todo_file}"
         proc = await asyncio.create_subprocess_exec("docker", "cp", tmp_path, dest, 
                                                     stdout=asyncio.subprocess.PIPE)
@@ -1976,7 +1976,7 @@ async def todo_write_tool_local(action: str, id: str = None, content: str = None
     """本地待办任务管理工具 - 使用3位数字有序ID"""
     try:
         cwd = await _get_current_cwd()
-        party_dir = Path(cwd) / ".agent"
+        party_dir = Path(cwd) / ".agents"
         if not party_dir.exists():
             await aiofiles.os.makedirs(party_dir, exist_ok=True)
         
@@ -2127,8 +2127,8 @@ async def read_skill_tool_logic(cwd: str, skill_id: str, is_docker: bool = True)
     内部通用逻辑：读取 Skill 文件夹结构和说明文档。
     若工作区不存在该技能，且全局技能目录可用，则自动复制到工作区（Docker/Local 均支持）。
     """
-    skill_rel_path = f".agent/skills/{skill_id}"
-    workspace_skill_path = f"/workspace/.agent/skills/{skill_id}" if is_docker else str(Path(cwd) / ".agent" / "skills" / skill_id)
+    skill_rel_path = f".agents/skills/{skill_id}"
+    workspace_skill_path = f"/workspace/.agents/skills/{skill_id}" if is_docker else str(Path(cwd) / ".agents" / "skills" / skill_id)
 
     # ----- 复制逻辑：工作区缺失时，从全局复制 -----
     if is_docker:
@@ -2147,11 +2147,11 @@ async def read_skill_tool_logic(cwd: str, skill_id: str, is_docker: bool = True)
                 await _exec_docker_cmd_simple(cwd, test_global)
 
                 # 确保目标父目录存在
-                mkdir_cmd = ["mkdir", "-p", f"/workspace/.agent/skills"]
+                mkdir_cmd = ["mkdir", "-p", f"/workspace/.agents/skills"]
                 await _exec_docker_cmd_simple(cwd, mkdir_cmd)
 
                 # 执行复制
-                cp_cmd = ["cp", "-r", global_skill_path, f"/workspace/.agent/skills/"]
+                cp_cmd = ["cp", "-r", global_skill_path, f"/workspace/.agents/skills/"]
                 await _exec_docker_cmd_simple(cwd, cp_cmd)
 
                 print(f"[Skill AutoCopy][Docker] Copied global skill '{skill_id}' to workspace.")
@@ -2160,7 +2160,7 @@ async def read_skill_tool_logic(cwd: str, skill_id: str, is_docker: bool = True)
                 pass
     else:
         # Local 环境：使用 shutil 复制（已实现，但整合到 logic 中统一管理）
-        workspace_path = Path(cwd) / ".agent" / "skills" / skill_id
+        workspace_path = Path(cwd) / ".agents" / "skills" / skill_id
         if not workspace_path.exists():
             global_path = Path(SKILLS_DIR) / skill_id
             if global_path.exists() and global_path.is_dir():
@@ -2195,7 +2195,7 @@ async def read_skill_tool_logic(cwd: str, skill_id: str, is_docker: bool = True)
             return f"[Error] Skill '{skill_id}' not found or inaccessible in Docker: {str(e)}"
     else:
         try:
-            base_path = Path(cwd) / ".agent" / "skills" / skill_id
+            base_path = Path(cwd) / ".agents" / "skills" / skill_id
             if not base_path.exists():
                 return f"[Error] Skill '{skill_id}' folder does not exist in workspace and auto-copy failed or global skill unavailable."
 
@@ -2347,7 +2347,7 @@ TOOLS_REGISTRY = {
     "read_skill": {
         "type": "function", "function": {
             "name": "read_skill_tool", 
-            "description": "Read full documentation and file tree for a project-specific skill from .agent/skills/.",
+            "description": "Read full documentation and file tree for a project-specific skill from .agents/skills/.",
             "parameters": {
                 "type": "object", 
                 "properties": {
@@ -2409,7 +2409,7 @@ TOOLS_REGISTRY = {
         "type": "function",
         "function": {
             "name": "todo_write_tool",
-            "description": "[Docker] 待办任务管理工具。用于在 Docker 沙箱环境中管理任务列表，支持创建、查看、完成、编辑、删除等操作。所有任务持久化存储在容器的 /workspace/.agent/ai_todos.json 文件中。",
+            "description": "[Docker] 待办任务管理工具。用于在 Docker 沙箱环境中管理任务列表，支持创建、查看、完成、编辑、删除等操作。所有任务持久化存储在容器的 /workspace/.agents/ai_todos.json 文件中。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2642,7 +2642,7 @@ LOCAL_TOOLS_REGISTRY = {
     "read_skill_local": {
         "type": "function", "function": {
             "name": "read_skill_tool_local", 
-            "description": "Read full documentation and file tree for a project-specific skill from .agent/skills/ (Local).",
+            "description": "Read full documentation and file tree for a project-specific skill from .agents/skills/ (Local).",
             "parameters": {
                 "type": "object", 
                 "properties": {
@@ -2703,7 +2703,7 @@ LOCAL_TOOLS_REGISTRY = {
         "type": "function",
         "function": {
             "name": "todo_write_tool_local",
-            "description": "本地待办任务管理工具。用于管理项目中的任务列表，包括创建、查看、完成、编辑、删除等操作。所有任务持久化存储在项目根目录的 .agent/ai_todos.json 文件中。",
+            "description": "本地待办任务管理工具。用于管理项目中的任务列表，包括创建、查看、完成、编辑、删除等操作。所有任务持久化存储在项目根目录的 .agents/ai_todos.json 文件中。",
             "parameters": {
                 "type": "object",
                 "properties": {

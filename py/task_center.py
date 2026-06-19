@@ -65,7 +65,7 @@ class TaskCenter:
     
     def __init__(self, workspace_dir: str):
         self.workspace_dir = Path(workspace_dir)
-        self.task_dir = self.workspace_dir / ".agent" / "tasks"
+        self.task_dir = self.workspace_dir / ".agents" / "tasks"
         self._lock = asyncio.Lock()
         self._ensure_task_dir()
     

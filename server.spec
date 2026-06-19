@@ -41,7 +41,6 @@ a = Analysis(
     datas=[
         ('config/settings_template.json', 'config'),
         ('config/locales.json', 'config'),
-        ('config/safety_words.json', 'config'),
         ('static', 'static'),
         ('vrm', 'vrm'),
         ('tha_models', 'tha_models'),
