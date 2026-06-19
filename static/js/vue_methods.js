@@ -1410,7 +1410,7 @@ formatMessage(content, index) {
       // LaTeX 公式保护机制
       // 防止公式内部的 < 和 > 被后续的 HTML 标签过滤正则误杀
       // ============================================================
-      formatted = formatted.replace(/\s\s([\s\S]*?)(?:\s\s|$)|\$([^\$\n]+)\$/g, function(match) {
+      formatted = formatted.replace(/\$\$([\s\S]*?)(?:\$\$|$)|\$([^\$\n]+)\$/g, function(match) {
         return match.replace(/</g, '\\lt ').replace(/>/g, '\\gt ');
       });
 
@@ -3925,9 +3925,23 @@ formatMessage(content, index) {
 
         // 【维度二：位置退级判定】（默认兜底）
         // 在标准的单路流式输出中，最新、且正在接收流式数据的块，必然是 displayBlocks 中的最后一个元素
-        const isLast = msg.displayBlocks && (blockIndex === msg.displayBlocks.length - 1);
-        
-        return isLast;
+        const blocks = msg.displayBlocks;
+        if (!blocks) return false;
+        if (blockIndex === blocks.length - 1) return true;
+
+        // 【维度三：工具块滞后保护】
+        // 流式输出中，文本块可能先于工具块完成，导致仍在执行中的工具块
+        // 被后续已完成的文本块"挤"到倒数第二个位置而被错误折叠。
+        // 对于工具类块（tool_call/tool_result/reasoning），如果它是整个数组中
+        // 最后一个工具类块，则仍应视为活跃状态。
+        if (this.isToolBlock(block)) {
+            for (let i = blocks.length - 1; i > blockIndex; i--) {
+                if (this.isToolBlock(blocks[i])) return false;
+            }
+            return true;
+        }
+
+        return false;
     },
 
     // 2. 统一控制哪些块应该展开，哪些块应该折叠
