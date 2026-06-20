@@ -43,6 +43,10 @@
       gap: 10px;
       padding: 12px 4px 10px 4px;
       scrollbar-width: none;
+    }
+    /* GPU 合成层仅在窗口聚焦时启用：避免透明窗口失焦时合成层丢失 alpha，
+       在消息区域出现一整块不透明的“气泡”背景 */
+    #message-area.gpu-accel {
       contain: paint;
       will-change: scroll-position;
       -webkit-transform: translateZ(0);
@@ -739,6 +743,16 @@
       }
       connectWS();
       userInput.value = '';
+
+      // 透明窗口失焦时移除 GPU 合成层，避免消息区域出现整块不透明背景
+      function applyGpuAccel() {
+        if (document.hasFocus()) msgArea.classList.add('gpu-accel');
+        else msgArea.classList.remove('gpu-accel');
+      }
+      window.addEventListener('focus', applyGpuAccel);
+      window.addEventListener('blur', applyGpuAccel);
+      applyGpuAccel();
+
       setTimeout(function() { userInput.focus(); }, 400);
     })();
   </script>
