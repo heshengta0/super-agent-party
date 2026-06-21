@@ -9,6 +9,7 @@ let app, sprite, renderWs, ttsWs;
 let mx = 0, my = 0;
 let connected = false, ttsConnected = false;
 let isLocked = false, pttVisible = false, textInputVisible = false;
+let isSubtitleEnabled = true;
 let isPanelHovered = false, hideTimeout, hideTimer;
 let allModels = [], currentModelIndex = 0;
 let audioCtx = null, audioAnalyser = null, mouthTimer = null;
@@ -31,8 +32,8 @@ async function t(key) {
         return window.translations[lang][key];
     }
     const fb = {
-        'zh-CN': { 'LockWindow': '锁定窗口', 'UnlockWindow': '解锁窗口', 'AutoHideDescription': '鼠标悬停自动隐藏', 'AutoHideEnabled': '自动隐藏已启用', 'Previous': '上一个模型', 'Next': '下一个模型', 'refreshWindow': '刷新 / 重置', 'closeWindow': '关闭挂件', 'WebSocketConnected': '服务已连接', 'WebSocketDisconnected': '服务重连中...', 'EnableVoiceInput': '开启语音唤醒', 'DisableVoiceInput': '关闭语音唤醒', 'EnableTextInput': '开启文字输入', 'DisableTextInput': '关闭文字输入', 'dragWindow': '按住拖动' },
-        'en-US': { 'LockWindow': 'Lock Window', 'UnlockWindow': 'Unlock Window', 'AutoHideDescription': 'Auto Hide on Hover', 'AutoHideEnabled': 'Auto Hide Enabled', 'Previous': 'Previous Model', 'Next': 'Next Model', 'refreshWindow': 'Refresh / Reset', 'closeWindow': 'Close Widget', 'WebSocketConnected': 'Services Connected', 'WebSocketDisconnected': 'Services Disconnected', 'EnableVoiceInput': 'Enable Voice Input', 'DisableVoiceInput': 'Disable Voice Input', 'EnableTextInput': 'Enable Text Input', 'DisableTextInput': 'Disable Text Input', 'dragWindow': 'Drag to move' }
+        'zh-CN': { 'LockWindow': '锁定窗口', 'UnlockWindow': '解锁窗口', 'AutoHideDescription': '鼠标悬停自动隐藏', 'AutoHideEnabled': '自动隐藏已启用', 'Previous': '上一个模型', 'Next': '下一个模型', 'refreshWindow': '刷新 / 重置', 'closeWindow': '关闭挂件', 'WebSocketConnected': '服务已连接', 'WebSocketDisconnected': '服务重连中...', 'EnableVoiceInput': '开启语音唤醒', 'DisableVoiceInput': '关闭语音唤醒', 'EnableTextInput': '开启文字输入', 'DisableTextInput': '关闭文字输入', 'dragWindow': '按住拖动', 'SubtitleEnabled': '字幕已开启', 'SubtitleDisabled': '字幕已关闭' },
+        'en-US': { 'LockWindow': 'Lock Window', 'UnlockWindow': 'Unlock Window', 'AutoHideDescription': 'Auto Hide on Hover', 'AutoHideEnabled': 'Auto Hide Enabled', 'Previous': 'Previous Model', 'Next': 'Next Model', 'refreshWindow': 'Refresh / Reset', 'closeWindow': 'Close Widget', 'WebSocketConnected': 'Services Connected', 'WebSocketDisconnected': 'Services Disconnected', 'EnableVoiceInput': 'Enable Voice Input', 'DisableVoiceInput': 'Disable Voice Input', 'EnableTextInput': 'Enable Text Input', 'DisableTextInput': 'Disable Text Input', 'dragWindow': 'Drag to move', 'SubtitleEnabled': 'Subtitle Enabled', 'SubtitleDisabled': 'Subtitle Disabled' }
     };
     return fb[lang]?.[key] || key;
 }
@@ -345,6 +346,7 @@ const closeBtn = document.getElementById('close-btn');
 const wsStatusBtn = document.getElementById('ws-status-btn');
 const voiceBtn = document.getElementById('voice-btn');
 const textBtn = document.getElementById('text-btn');
+const subtitleBtn = document.getElementById('subtitle-btn');
 const dragBtn = document.getElementById('drag-handle') || document.getElementById('drag-btn');
 const pttBtn = document.getElementById('ptt-floating-btn');
 const textContainer = document.getElementById('text-input-container');
@@ -411,6 +413,20 @@ bindTapEvent(textBtn, async () => {
   if (tooltipContainer.style.opacity === '1') customTooltip.textContent = text;
 });
 
+// --- Subtitle Toggle ---
+function toggleSubtitle(enable) {
+  isSubtitleEnabled = enable;
+  if (subtitleEl) subtitleEl.style.display = enable ? 'block' : 'none';
+}
+
+bindTapEvent(subtitleBtn, async () => {
+  toggleSubtitle(!isSubtitleEnabled);
+  subtitleBtn.style.color = isSubtitleEnabled ? '#28a745' : '#dc3545';
+  const text = await (isSubtitleEnabled ? t('SubtitleEnabled') : t('SubtitleDisabled'));
+  subtitleBtn.dataset.title = text;
+  if (tooltipContainer.style.opacity === '1') customTooltip.textContent = text;
+});
+
 // --- App Control ---
 bindTapEvent(refreshBtn, () => location.reload());
 bindTapEvent(closeBtn, () => window.close());
@@ -428,6 +444,7 @@ bindTapEvent(wsStatusBtn, () => { disconnectRender(); disconnectTTS(); setTimeou
     addHoverEffect(wsStatusBtn, async () => (connected && ttsConnected) ? await t('WebSocketConnected') : await t('WebSocketDisconnected'));
     addHoverEffect(voiceBtn, async () => pttVisible ? await t('DisableVoiceInput') : await t('EnableVoiceInput'));
     addHoverEffect(textBtn, async () => textInputVisible ? await t('DisableTextInput') : await t('EnableTextInput'));
+    addHoverEffect(subtitleBtn, async () => isSubtitleEnabled ? await t('SubtitleEnabled') : await t('SubtitleDisabled'));
 })();
 
 setInterval(async () => {
@@ -522,6 +539,7 @@ let processedChunks = new Set();
 
 function renderSubtitleUI(text) {
     if (!subtitleEl) return;
+    if (!isSubtitleEnabled) return;
     subtitleEl.textContent = text;
     subtitleEl.style.opacity = '1';
 }
