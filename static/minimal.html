@@ -303,6 +303,7 @@
     <div id="message-area" class="empty"></div>
     <div class="input-container">
       <button id="close-btn" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+      <div id="shortcut-menu" class="shortcut-menu" style="display:none;"></div>
       <div class="hero-input-wrapper">
         <div>
           <textarea id="user-input"
@@ -803,14 +804,93 @@
         return new Blob([buffer], { type: 'audio/wav' });
       }
 
+      // ===== 快捷指令弹出菜单 =====
+      var SHORTCUT_COMMANDS = [
+        { cmd: '/help', aliases: ['/帮助', '/?'], mode: 'run', desc: '列出所有可用的快捷指令' },
+        { cmd: '/new', aliases: ['/reset', '/重启', '/新建'], mode: 'run', desc: '清空当前对话并开始新的会话' },
+        { cmd: '/stop', aliases: ['/停止'], mode: 'run', desc: '停止当前正在进行的回复' },
+        { cmd: '/retry', aliases: ['/重试'], mode: 'run', desc: '重新生成上一条回复' },
+        { cmd: '/model', aliases: ['/模型'], mode: 'fill', desc: '切换当前模型' },
+        { cmd: '/personality', aliases: ['/角色'], mode: 'fill', desc: '切换角色卡 / 人格' },
+        { cmd: '/skills', aliases: ['/技能'], mode: 'run', desc: '查看可用技能列表' }
+      ];
+      var shortcutMenuEl = document.getElementById('shortcut-menu');
+      var shortcutItems = [];
+      var shortcutIndex = 0;
+      var shortcutMenuOpen = false;
+
+      function shortcutsEnabled() {
+        if (cachedSettings && cachedSettings.systemSettings && typeof cachedSettings.systemSettings.enableShortcuts === 'boolean') {
+          return cachedSettings.systemSettings.enableShortcuts;
+        }
+        return true;
+      }
+      function renderShortcutMenu() {
+        var html = '';
+        for (var i = 0; i < shortcutItems.length; i++) {
+          var it = shortcutItems[i];
+          var alias = (it.aliases && it.aliases.length) ? '<span class="shortcut-menu-alias">' + it.aliases.join('  ') + '</span>' : '';
+          html += '<div class="shortcut-menu-item' + (i === shortcutIndex ? ' active' : '') + '" data-i="' + i + '">' +
+                  '<span class="shortcut-menu-cmd">' + it.cmd + '</span>' + alias +
+                  '<span class="shortcut-menu-desc">' + it.desc + '</span></div>';
+        }
+        shortcutMenuEl.innerHTML = html;
+      }
+      function refreshShortcutMenu() {
+        var m = /^\/(\S*)$/.exec(userInput.value || '');
+        if (!shortcutsEnabled() || !m) { closeShortcutMenu(); return; }
+        var token = m[1].toLowerCase();
+        shortcutItems = SHORTCUT_COMMANDS.filter(function(c) {
+          if (!token) return true;
+          return [c.cmd].concat(c.aliases || []).some(function(n) { return n.toLowerCase().indexOf('/' + token) === 0; });
+        });
+        if (!shortcutItems.length) { closeShortcutMenu(); return; }
+        if (shortcutIndex >= shortcutItems.length) shortcutIndex = 0;
+        renderShortcutMenu();
+        shortcutMenuOpen = true;
+        shortcutMenuEl.style.display = 'block';
+      }
+      function moveShortcutMenu(d) {
+        var n = shortcutItems.length;
+        if (!n) return;
+        shortcutIndex = (shortcutIndex + d + n) % n;
+        renderShortcutMenu();
+      }
+      function closeShortcutMenu() {
+        shortcutMenuOpen = false;
+        shortcutIndex = 0;
+        shortcutMenuEl.style.display = 'none';
+      }
+      function selectShortcutMenu(it) {
+        if (!it) return;
+        userInput.value = it.cmd + (it.mode === 'fill' ? ' ' : '');
+        closeShortcutMenu();
+        userInput.style.height = 'auto';
+        userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+        sendBtn.disabled = !userInput.value.trim();
+        userInput.focus();
+      }
+      shortcutMenuEl.addEventListener('mousedown', function(e) {
+        var item = e.target.closest ? e.target.closest('.shortcut-menu-item') : null;
+        if (item) { e.preventDefault(); selectShortcutMenu(shortcutItems[parseInt(item.getAttribute('data-i'), 10)]); }
+      });
+
       userInput.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         sendBtn.disabled = !this.value.trim();
+        refreshShortcutMenu();
       });
       userInput.addEventListener('keydown', function(e) {
+        if (shortcutMenuOpen && shortcutItems.length) {
+          if (e.key === 'ArrowDown') { e.preventDefault(); moveShortcutMenu(1); return; }
+          if (e.key === 'ArrowUp') { e.preventDefault(); moveShortcutMenu(-1); return; }
+          if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); selectShortcutMenu(shortcutItems[shortcutIndex]); return; }
+          if (e.key === 'Escape') { e.preventDefault(); closeShortcutMenu(); return; }
+        }
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
       });
+      userInput.addEventListener('blur', function() { setTimeout(closeShortcutMenu, 150); });
       sendBtn.addEventListener('click', sendMessage);
       closeBtn.addEventListener('click', closeWindow);
       newChatBtn.addEventListener('click', newConversation);

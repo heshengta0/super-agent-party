@@ -629,6 +629,9 @@ function updateElement(el, rawMarkdown, formatFn) {
             
             <!-- 中心大输入框容器 -->
             <div class="hero-input-wrapper" :class="{ 'is-focus': isHeroInputFocus }">
+              <transition name="shortcut-menu">
+                <shortcut-menu v-if="shortcutMenuOpen" :items="shortcutMenuItems" :index="shortcutMenuIndex" @select="selectShortcutMenuItem" @hover="i => shortcutMenuIndex = i"></shortcut-menu>
+              </transition>
               
               <!-- ✨ 新增：附件预览区域 ✨ -->
               <div class="attachment-preview-list" v-show="allItems.length > 0">
@@ -1327,6 +1330,9 @@ function updateElement(el, rawMarkdown, formatFn) {
                   <!-- ✨✨✨ 新增：统一的外层包裹器 ✨✨✨ -->
                   <!-- tabindex="-1" 是为了让 focus-within 生效更稳定 -->
                   <div class="unified-input-wrapper">
+                    <transition name="shortcut-menu">
+                      <shortcut-menu v-if="shortcutMenuOpen" :items="shortcutMenuItems" :index="shortcutMenuIndex" @select="selectShortcutMenuItem" @hover="i => shortcutMenuIndex = i"></shortcut-menu>
+                    </transition>
                     
                     <div class="button-group">
 

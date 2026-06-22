@@ -13986,3 +13986,113 @@ body.has-custom-bg #app {
   position: relative;
   z-index: 1;
 }
+/* ===== 快捷指令弹出菜单（抽屉式） ===== */
+.unified-input-wrapper,
+.hero-input-wrapper {
+  position: relative;
+  overflow: visible;
+}
+.browser-copilot-sidebar .unified-input-wrapper {
+  overflow: visible;
+}
+.shortcut-menu {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  background-color: var(--el-bg-color-overlay, var(--el-bg-color));
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.shortcut-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.shortcut-menu-item.active,
+.shortcut-menu-item:hover {
+  background-color: var(--el-fill-color-light);
+}
+.shortcut-menu-cmd {
+  font-family: var(--el-font-family-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  flex-shrink: 0;
+  min-width: 92px;
+}
+.shortcut-menu-alias {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+.shortcut-menu-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+.shortcut-menu-enter-active,
+.shortcut-menu-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.shortcut-menu-enter-from,
+.shortcut-menu-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* 快捷指令面板：自动隐藏滚动条（悬停时淡入） */
+.shortcut-menu {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.shortcut-menu:hover {
+  scrollbar-color: var(--el-border-color-darker, rgba(144, 147, 153, 0.4)) transparent;
+}
+.shortcut-menu::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.shortcut-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.shortcut-menu::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 3px;
+  transition: background-color 0.25s ease;
+}
+.shortcut-menu:hover::-webkit-scrollbar-thumb {
+  background-color: var(--el-border-color-darker, rgba(144, 147, 153, 0.4));
+}
+.shortcut-menu::-webkit-scrollbar-thumb:hover {
+  background-color: var(--el-text-color-secondary);
+}
+
+/* dashboard（居中布局）输入框：菜单改为向下展开，避免被滚动容器裁剪 / 标题遮挡 */
+.hero-input-wrapper .shortcut-menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+.hero-input-wrapper .shortcut-menu.shortcut-menu-enter-from,
+.hero-input-wrapper .shortcut-menu.shortcut-menu-leave-to {
+  transform: translateY(-10px);
+}
+
+/* dashboard：提升输入框区域层级，使向下展开的快捷指令面板覆盖在下方建议卡片(.guide-card)之上 */
+.dashboard-hero {
+  position: relative;
+  z-index: 10;
+}

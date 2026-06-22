@@ -258,30 +258,56 @@ class WeChatClient:
         user_text = getattr(msg, 'text', '').strip()
         if not user_text: return
 
-        # 1. 快捷指令与任务打断检查（非阻塞版）
-        if self.quickRestart:
-            content_lower = user_text.lower()
-            
-            # --- 停止指令 ---
-            if content_lower in ["/停止", "/stop"]:
+        # 1. 快捷指令与任务打断检查（统一快捷指令，受系统设置全局开关控制，非阻塞版）
+        from py import shortcut_commands
+        if await shortcut_commands.im_shortcuts_enabled():
+            action = shortcut_commands.parse_im_action(user_text)
+            if action == "stop":
                 logging.info(f"收到停止指令: chat_id={chat_id}")
                 if chat_id in self.active_tasks:
                     self.active_tasks[chat_id].cancel()
-                # 后台发送回复，不阻塞消息通道
-                asyncio.create_task(self._send_text(msg, "已停止当前输出。"))
+                asyncio.create_task(self._send_text(msg, shortcut_commands.STOP_MSG_ZH))
                 return
-
-            # --- 重启指令 ---
-            if content_lower in ["/重启", "/restart"]:
+            if action == "reset":
                 logging.info(f"收到重启指令: chat_id={chat_id}")
                 if chat_id in self.active_tasks:
                     self.active_tasks[chat_id].cancel()
                 self.memoryList[chat_id] = []
-                asyncio.create_task(self._send_text(msg, "对话记录已重置。"))
+                asyncio.create_task(self._send_text(msg, shortcut_commands.RESET_MSG_ZH))
+                return
+            if action == "help":
+                asyncio.create_task(self._send_text(msg, shortcut_commands.build_help_text("zh")))
+                return
+            if action == "skills":
+                _txt = await shortcut_commands.build_skills_text("zh")
+                asyncio.create_task(self._send_text(msg, _txt))
+                return
+            if action == "model":
+                _txt = await shortcut_commands.handle_model_command(user_text, "zh")
+                asyncio.create_task(self._send_text(msg, _txt))
+                return
+            if action == "personality":
+                _txt = await shortcut_commands.handle_personality_command(user_text, "zh")
+                asyncio.create_task(self._send_text(msg, _txt))
+                return
+            if action == "retry":
+                asyncio.create_task(self._send_text(msg, shortcut_commands.retry_hint("zh")))
+                return
+            if action == "mode":
+                _txt = await shortcut_commands.build_mode_info_text("zh")
+                asyncio.create_task(self._send_text(msg, _txt))
                 return
 
         if "/id" in user_text.lower():
             asyncio.create_task(self._send_text(msg, f"🤖 当前 ChatID:\n`{chat_id}`"))
+            return
+
+        from py import shortcut_commands as _sc
+        _sub = _sc.parse_subscribe_action(user_text)
+        if _sub:
+            _reply = await _sc.handle_subscribe_command("wechat", chat_id, _sub == "sub", "zh")
+            if _reply:
+                asyncio.create_task(self._send_text(msg, _reply))
             return
 
         # 2. 如果当前有正在处理的任务，则打断它

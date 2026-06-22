@@ -266,23 +266,42 @@ class FeishuClient:
         msg_type = data.event.message.message_type
         global_behavior_engine.report_activity("feishu", chat_id)
 
-        # 1. 快捷指令与任务打断检查
-        if self.quickRestart and msg_type == "text":
+        # 1. 快捷指令与任务打断检查（统一快捷指令，受系统设置全局开关控制）
+        if msg_type == "text":
             try:
+                from py import shortcut_commands
                 text = json.loads(data.event.message.content).get("text", "").strip()
-                # 停止逻辑
-                if text in ["/停止", "/stop"]:
-                    if chat_id in self.active_tasks:
-                        self.active_tasks[chat_id].cancel()
-                        await self._send_text(data.event.message, "已停止当前输出。")
-                    return
-                # 重启逻辑
-                if text in ["/重启", "/restart"]:
-                    if chat_id in self.active_tasks:
-                        self.active_tasks[chat_id].cancel()
-                    self.memoryList[chat_id] = []
-                    await self._send_text(data.event.message, "对话记录已重置。")
-                    return
+                if await shortcut_commands.im_shortcuts_enabled():
+                    action = shortcut_commands.parse_im_action(text)
+                    if action == "stop":
+                        if chat_id in self.active_tasks:
+                            self.active_tasks[chat_id].cancel()
+                            await self._send_text(data.event.message, shortcut_commands.STOP_MSG_ZH)
+                        return
+                    if action == "reset":
+                        if chat_id in self.active_tasks:
+                            self.active_tasks[chat_id].cancel()
+                        self.memoryList[chat_id] = []
+                        await self._send_text(data.event.message, shortcut_commands.RESET_MSG_ZH)
+                        return
+                    if action == "help":
+                        await self._send_text(data.event.message, shortcut_commands.build_help_text("zh"))
+                        return
+                    if action == "skills":
+                        await self._send_text(data.event.message, await shortcut_commands.build_skills_text("zh"))
+                        return
+                    if action == "model":
+                        await self._send_text(data.event.message, await shortcut_commands.handle_model_command(text, "zh"))
+                        return
+                    if action == "personality":
+                        await self._send_text(data.event.message, await shortcut_commands.handle_personality_command(text, "zh"))
+                        return
+                    if action == "retry":
+                        await self._send_text(data.event.message, shortcut_commands.retry_hint("zh"))
+                        return
+                    if action == "mode":
+                        await self._send_text(data.event.message, await shortcut_commands.build_mode_info_text("zh"))
+                        return
             except: pass
 
         # 2. 如果当前有任务正在运行，直接打断
@@ -322,6 +341,13 @@ class FeishuClient:
             text = json.loads(msg.content).get("text", "")
             if "/id" in text.lower():
                 await self._send_text(msg, f"🤖 **会话信息**\n\nChatID:\n`{chat_id}`")
+                return
+            from py import shortcut_commands as _sc
+            _sub = _sc.parse_subscribe_action(text)
+            if _sub:
+                _reply = await _sc.handle_subscribe_command("feishu", chat_id, _sub == "sub", "zh")
+                if _reply:
+                    await self._send_text(msg, _reply)
                 return
             user_text = text
             if self.wakeWord and self.wakeWord not in user_text: return

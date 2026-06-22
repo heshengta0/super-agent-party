@@ -152,21 +152,38 @@ class SlackBotManager:
         cid = event["channel"]
         text = event.get("text", "").strip()
 
-        # 1. 快捷指令检查
-        if self.config.quick_restart:
-            cmd = text.lower()
-            # 停止指令
-            if cmd in ["/停止", "/stop"]:
+        # 1. 快捷指令检查（统一快捷指令，受系统设置全局开关控制）
+        from py import shortcut_commands
+        if await shortcut_commands.im_shortcuts_enabled():
+            action = shortcut_commands.parse_im_action(text)
+            if action == "stop":
                 if cid in self.active_tasks:
                     self.active_tasks[cid].cancel()
-                    await web_client.chat_postMessage(channel=cid, text="Stopped current output.")
+                    await web_client.chat_postMessage(channel=cid, text=shortcut_commands.STOP_MSG_EN)
                 return
-            # 重启指令
-            if cmd in ["/重启", "/restart"]:
+            if action == "reset":
                 if cid in self.active_tasks:
                     self.active_tasks[cid].cancel()
                 self.memory[cid] = []
-                await web_client.chat_postMessage(channel=cid, text="Conversation history has been reset.")
+                await web_client.chat_postMessage(channel=cid, text=shortcut_commands.RESET_MSG_EN)
+                return
+            if action == "help":
+                await web_client.chat_postMessage(channel=cid, text=shortcut_commands.build_help_text("en"))
+                return
+            if action == "skills":
+                await web_client.chat_postMessage(channel=cid, text=await shortcut_commands.build_skills_text("en"))
+                return
+            if action == "model":
+                await web_client.chat_postMessage(channel=cid, text=await shortcut_commands.handle_model_command(text, "en"))
+                return
+            if action == "personality":
+                await web_client.chat_postMessage(channel=cid, text=await shortcut_commands.handle_personality_command(text, "en"))
+                return
+            if action == "retry":
+                await web_client.chat_postMessage(channel=cid, text=shortcut_commands.retry_hint("en"))
+                return
+            if action == "mode":
+                await web_client.chat_postMessage(channel=cid, text=await shortcut_commands.build_mode_info_text("en"))
                 return
 
         # 2. 如果该频道有正在运行的任务，打断它
@@ -199,6 +216,14 @@ class SlackBotManager:
 
         if text.lower() == "/id":
             await web_client.chat_postMessage(channel=cid, text=f"🤖 *Session ID*\n`{cid}`")
+            return
+
+        from py import shortcut_commands as _sc
+        _sub = _sc.parse_subscribe_action(text)
+        if _sub:
+            _reply = await _sc.handle_subscribe_command("slack", cid, _sub == "sub", "en")
+            if _reply:
+                await web_client.chat_postMessage(channel=cid, text=_reply)
             return
 
         if self.config.wakeWord and self.config.wakeWord not in text: return

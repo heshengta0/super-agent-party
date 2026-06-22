@@ -167,22 +167,41 @@ class DiscordClient(discord.Client):
 
         cid = msg.channel.id
         
-        # 1. 快捷指令与任务打断检查
-        if self.config.quick_restart and msg.content:
-            content_strip = msg.content.strip().lower()
-            # 停止逻辑
-            if content_strip in ["/停止", "/stop"]:
-                if cid in self.active_tasks:
-                    self.active_tasks[cid].cancel()
-                    await msg.reply("Stopped current output.")
-                return
-            # 重启逻辑
-            if content_strip in ["/重启", "/restart"]:
-                if cid in self.active_tasks:
-                    self.active_tasks[cid].cancel()
-                self.memory[cid] = []
-                await msg.reply("Conversation history has been reset.")
-                return
+        # 1. 快捷指令与任务打断检查（统一快捷指令，受系统设置全局开关控制）
+        if msg.content:
+            from py import shortcut_commands
+            content_strip = msg.content.strip()
+            if await shortcut_commands.im_shortcuts_enabled():
+                action = shortcut_commands.parse_im_action(content_strip)
+                if action == "stop":
+                    if cid in self.active_tasks:
+                        self.active_tasks[cid].cancel()
+                        await msg.reply(shortcut_commands.STOP_MSG_EN)
+                    return
+                if action == "reset":
+                    if cid in self.active_tasks:
+                        self.active_tasks[cid].cancel()
+                    self.memory[cid] = []
+                    await msg.reply(shortcut_commands.RESET_MSG_EN)
+                    return
+                if action == "help":
+                    await msg.reply(shortcut_commands.build_help_text("en"))
+                    return
+                if action == "skills":
+                    await msg.reply(await shortcut_commands.build_skills_text("en"))
+                    return
+                if action == "model":
+                    await msg.reply(await shortcut_commands.handle_model_command(content_strip, "en"))
+                    return
+                if action == "personality":
+                    await msg.reply(await shortcut_commands.handle_personality_command(content_strip, "en"))
+                    return
+                if action == "retry":
+                    await msg.reply(shortcut_commands.retry_hint("en"))
+                    return
+                if action == "mode":
+                    await msg.reply(await shortcut_commands.build_mode_info_text("en"))
+                    return
 
         # 2. 如果当前有正在处理的任务，则打断它
         if cid in self.active_tasks:
@@ -215,6 +234,14 @@ class DiscordClient(discord.Client):
 
         if msg.content.strip().lower() == "/id":
             await msg.reply(f"🤖 **Channel ID**\n`{cid}`")
+            return
+
+        from py import shortcut_commands as _sc
+        _sub = _sc.parse_subscribe_action(msg.content)
+        if _sub:
+            _reply = await _sc.handle_subscribe_command("discord", str(cid), _sub == "sub", "en")
+            if _reply:
+                await msg.reply(_reply)
             return
 
         user_content = []

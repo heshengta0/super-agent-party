@@ -1072,6 +1072,11 @@ const app = Vue.createApp({
   },
   watch: {
 
+    // 监听输入框内容，驱动快捷指令弹出菜单
+    userInput() {
+      this.refreshShortcutMenu();
+    },
+
     // 监听背景图变化，全局提升至 body 层
     'systemSettings.backgroundURL': {
       handler(newUrl) {
@@ -1431,6 +1436,57 @@ docker-compose -f ${composeFile} up -d`;
       });
 
       return Array.from(skillMap.values());
+    },
+    // 快捷指令弹出菜单：当前 / 后输入的指令片段（无匹配返回 null）
+    shortcutMenuToken() {
+      if (!this.systemSettings || !this.systemSettings.enableShortcuts) return null;
+      const m = /^\/(\S*)$/.exec(this.userInput || '');
+      return m ? m[1].toLowerCase() : null;
+    },
+    // 快捷指令弹出菜单：过滤后的候选项列表
+    shortcutMenuItems() {
+      const token = this.shortcutMenuToken;
+      if (token === null) return [];
+      const cliEnabled = !!(this.CLISettings && this.CLISettings.enabled);
+      const runIds = ['help', 'new', 'stop', 'retry', 'skills'];
+      const fillIds = ['model', 'personality'];
+      const modeIds = ['mode_plan', 'mode_read', 'mode_edit', 'mode_yolo', 'mode_cowork', 'mode_goal'];
+      const items = [];
+      (this.shortcutCommands || []).forEach(c => {
+        if (!runIds.includes(c.id) && !fillIds.includes(c.id) && !modeIds.includes(c.id)) return;
+        if (c.requiresCli && !cliEnabled) return; // 需开启电脑命令行控制
+        const word = (c.syntax || '').split(/\s+/)[0];
+        const names = [word, ...(c.aliases || [])];
+        const match = !token || names.some(n => n.toLowerCase().startsWith('/' + token));
+        if (!match) return;
+        items.push({
+          key: c.id,
+          label: word,
+          aliases: c.aliases || [],
+          desc: this.t(c.descKey),
+          mode: fillIds.includes(c.id) ? 'fill' : 'run',
+          insert: word,
+          isSkill: false
+        });
+      });
+      if (cliEnabled) {
+        (this.computedSkillsList || []).forEach(s => {
+          const name = s.name || s.id;
+          if (!name) return;
+          const word = '/' + name;
+          if (token && !word.toLowerCase().startsWith('/' + token)) return;
+          items.push({
+            key: 'skill:' + (s.id || name),
+            label: word,
+            aliases: [],
+            desc: s.description || this.t('cmd_skill_desc'),
+            mode: 'fill',
+            insert: word,
+            isSkill: true
+          });
+        });
+      }
+      return items;
     },
     hasWorkspacePath() {
         return this.CLISettings && 
@@ -2215,6 +2271,27 @@ app.component('a2-u-i-renderer', A2UIRendererComponent);
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
+
+// 快捷指令弹出菜单组件（输入框 / 开头时的抽屉式菜单）
+app.component('shortcut-menu', {
+  props: {
+    items: { type: Array, default: () => [] },
+    index: { type: Number, default: 0 }
+  },
+  emits: ['select', 'hover'],
+  template: `
+    <div class="shortcut-menu">
+      <div v-for="(item, i) in items" :key="item.key"
+           class="shortcut-menu-item" :class="{ active: i === index }"
+           @mousedown.prevent="$emit('select', item)"
+           @mouseenter="$emit('hover', i)">
+        <span class="shortcut-menu-cmd">{{ item.label }}</span>
+        <span v-if="item.aliases && item.aliases.length" class="shortcut-menu-alias">{{ item.aliases.join('  ') }}</span>
+        <span class="shortcut-menu-desc">{{ item.desc }}</span>
+      </div>
+    </div>
+  `
+});
 
 // 挂载应用
 app.mount('#app');

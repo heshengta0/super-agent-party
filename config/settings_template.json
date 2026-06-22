@@ -27,7 +27,8 @@
       "contentSafety": false,
       "disclaimerAccepted": false,
       "showDisclaimer": true,
-      "goal_iterations": 30
+      "goal_iterations": 30,
+      "enableShortcuts": true
     },
     "mainAgent":"super-model",
     "mcpServers": {},

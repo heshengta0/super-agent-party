@@ -73,22 +73,41 @@ class TelegramClient:
         self.offset = u["update_id"] + 1
         chat_id = msg["chat"]["id"]
 
-        # 快捷指令检查与打断
-        if "text" in msg and self.quickRestart:
-            text = msg["text"].strip().lower()
-            # /停止 指令
-            if text in ["/stop", "/停止"]:
-                if chat_id in self.active_tasks:
-                    self.active_tasks[chat_id].cancel()
-                    await self._send_text(chat_id, "Stopped current output.")
-                return
-            # /重启 指令
-            if text in ["/restart", "/重启"]:
-                if chat_id in self.active_tasks:
-                    self.active_tasks[chat_id].cancel()
-                self.memoryList[chat_id] = []
-                await self._send_text(chat_id, "Conversation history has been reset.")
-                return
+        # 快捷指令检查与打断（统一快捷指令，受系统设置全局开关控制）
+        if "text" in msg:
+            from py import shortcut_commands
+            text = msg["text"].strip()
+            if await shortcut_commands.im_shortcuts_enabled():
+                action = shortcut_commands.parse_im_action(text)
+                if action == "stop":
+                    if chat_id in self.active_tasks:
+                        self.active_tasks[chat_id].cancel()
+                        await self._send_text(chat_id, shortcut_commands.STOP_MSG_EN)
+                    return
+                if action == "reset":
+                    if chat_id in self.active_tasks:
+                        self.active_tasks[chat_id].cancel()
+                    self.memoryList[chat_id] = []
+                    await self._send_text(chat_id, shortcut_commands.RESET_MSG_EN)
+                    return
+                if action == "help":
+                    await self._send_text(chat_id, shortcut_commands.build_help_text("en"))
+                    return
+                if action == "skills":
+                    await self._send_text(chat_id, await shortcut_commands.build_skills_text("en"))
+                    return
+                if action == "model":
+                    await self._send_text(chat_id, await shortcut_commands.handle_model_command(text, "en"))
+                    return
+                if action == "personality":
+                    await self._send_text(chat_id, await shortcut_commands.handle_personality_command(text, "en"))
+                    return
+                if action == "retry":
+                    await self._send_text(chat_id, shortcut_commands.retry_hint("en"))
+                    return
+                if action == "mode":
+                    await self._send_text(chat_id, await shortcut_commands.build_mode_info_text("en"))
+                    return
 
         # 自动打断旧任务
         if chat_id in self.active_tasks:
@@ -126,6 +145,14 @@ class TelegramClient:
 
         if text.strip().lower() == "/id":
             await self._send_text(chat_id, f"🤖 **Session ID**\n`{chat_id}`")
+            return
+
+        from py import shortcut_commands as _sc
+        _sub = _sc.parse_subscribe_action(text)
+        if _sub:
+            _reply = await _sc.handle_subscribe_command("telegram", str(chat_id), _sub == "sub", "en")
+            if _reply:
+                await self._send_text(chat_id, _reply)
             return
 
         if self.wakeWord and self.wakeWord not in text: return

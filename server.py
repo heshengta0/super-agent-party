@@ -2825,7 +2825,9 @@ Assistant: 表格如下：
 
     # ==================== 极短动态内容注入到用户消息末尾 ====================
     # 快捷指令响应（仅当轮触发）
-    if cwd and Path(cwd).exists() and cli_settings.get("enabled", False) and cli_settings.get("shortcut", False):
+    # 总开关为系统设置中的全局 enableShortcuts；注入类（#记忆 / 技能）仍需启用 CLI 工具并配置工作区
+    from py.shortcut_commands import is_shortcuts_enabled
+    if is_shortcuts_enabled(settings) and cwd and Path(cwd).exists() and cli_settings.get("enabled", False):
         user_text = ""
         if request.messages and request.messages[-1]['role'] == 'user':
             user_msg_content = request.messages[-1].get('content', '')

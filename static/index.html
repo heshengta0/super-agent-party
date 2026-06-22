@@ -711,6 +711,9 @@ function updateElement(el, rawMarkdown, formatFn) {
             
             <!-- 中心大输入框容器 -->
             <div class="hero-input-wrapper" :class="{ 'is-focus': isHeroInputFocus }">
+              <transition name="shortcut-menu">
+                <shortcut-menu v-if="shortcutMenuOpen" :items="shortcutMenuItems" :index="shortcutMenuIndex" @select="selectShortcutMenuItem" @hover="i => shortcutMenuIndex = i"></shortcut-menu>
+              </transition>
               
               <!-- ✨ 新增：附件预览区域 ✨ -->
               <div class="attachment-preview-list" v-show="allItems.length > 0">
@@ -1499,6 +1502,9 @@ function updateElement(el, rawMarkdown, formatFn) {
                   <!-- ✨✨✨ 新增：统一的外层包裹器 ✨✨✨ -->
                   <!-- tabindex="-1" 是为了让 focus-within 生效更稳定 -->
                   <div class="unified-input-wrapper">
+                    <transition name="shortcut-menu">
+                      <shortcut-menu v-if="shortcutMenuOpen" :items="shortcutMenuItems" :index="shortcutMenuIndex" @select="selectShortcutMenuItem" @hover="i => shortcutMenuIndex = i"></shortcut-menu>
+                    </transition>
                     
                     <div class="button-group">
 
@@ -9862,14 +9868,6 @@ function updateElement(el, rawMarkdown, formatFn) {
                           ></el-switch>
                         </el-form-item>
 
-                        <el-form-item :label="t('enabledShortCut')" class="form-item-align" label-position="left">
-                          <el-switch
-                            v-model="CLISettings.shortcut"
-                            @change="autoSaveSettings"
-                            class="tool-switch"
-                          ></el-switch>
-                        </el-form-item>
-
                       </div>
                       <el-alert
                         type="info"
@@ -12752,9 +12750,85 @@ function updateElement(el, rawMarkdown, formatFn) {
                 </el-form>
               </div>
 
+              <!-- ===== 快捷指令子页 ===== -->
+              <div v-show="subMenu === 'shortcuts'" class="page tools-container">
+                <el-form :model="systemSettings" class="settings-form" label-position="top">
+                  <div class="tool-item">
+                    <div class="tool-header">
+                      <span>
+                        <el-icon><i class="fa-solid fa-terminal"></i></el-icon>
+                        {{ t('enableShortcutsGlobal') }}
+                      </span>
+                      <el-switch v-model="systemSettings.enableShortcuts" @change="autoSaveSettings"></el-switch>
+                    </div>
+                    <div class="tool-content">
+                      <el-alert type="info" :closable="false">{{ t('shortcutGlobalNotice') }}</el-alert>
+                    </div>
+                  </div>
+                  <div class="tool-item">
+                    <div class="tool-header">
+                      <span>
+                        <el-icon><i class="fa-solid fa-list"></i></el-icon>
+                        {{ t('shortcutListTitle') }}
+                      </span>
+                    </div>
+                    <div class="tool-content">
+                      <el-table :data="shortcutCommands" size="small" style="width:100%">
+                        <el-table-column :label="t('shortcutColCommand')" width="170">
+                          <template #default="scope"><code style="color: var(--el-text-color-primary); background: transparent;">{{ scope.row.syntax }}</code></template>
+                        </el-table-column>
+                        <el-table-column :label="t('shortcutColAlias')" width="170">
+                          <template #default="scope">
+                            <span v-if="scope.row.aliases.length">{{ scope.row.aliases.join('  ') }}</span>
+                            <span v-else>-</span>
+                          </template>
+                        </el-table-column>
+                        <el-table-column :label="t('shortcutColScope')" width="120">
+                          <template #default="scope">
+            <el-tag size="small" :type="scope.row.scope === 'both' ? 'success' : (scope.row.scope === 'web' ? 'primary' : (scope.row.scope === 'im' ? 'warning' : 'info'))">
+                {{ scope.row.scope === 'both' ? t('shortcutScopeBoth') : (scope.row.scope === 'web' ? t('shortcutScopeWeb') : (scope.row.scope === 'im' ? t('shortcutScopeIm') : t('shortcutScopeWorkspace'))) }}
+              </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column :label="t('shortcutColDesc')">
+                          <template #default="scope">{{ t(scope.row.descKey) }}</template>
+                        </el-table-column>
+                      </el-table>
+                    </div>
+                  </div>
+                </el-form>
+              </div>
+
             </div>
           </div>
         </div>
+        <!-- 快捷指令帮助弹窗（/help） -->
+        <el-dialog append-to-body
+          :title="t('shortcutHelpTitle')"
+          v-model="showShortcutHelp"
+          width="70%">
+          <el-table :data="shortcutCommands" size="small" style="width:100%">
+            <el-table-column :label="t('shortcutColCommand')" width="170">
+              <template #default="scope"><code style="color: var(--el-text-color-primary); background: transparent;">{{ scope.row.syntax }}</code></template>
+            </el-table-column>
+            <el-table-column :label="t('shortcutColAlias')" width="170">
+              <template #default="scope">
+                <span v-if="scope.row.aliases.length">{{ scope.row.aliases.join('  ') }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('shortcutColScope')" width="120">
+              <template #default="scope">
+                <el-tag size="small" :type="scope.row.scope === 'both' ? 'success' : (scope.row.scope === 'web' ? 'primary' : 'warning')">
+                  {{ scope.row.scope === 'both' ? t('shortcutScopeBoth') : (scope.row.scope === 'web' ? t('shortcutScopeWeb') : t('shortcutScopeWorkspace')) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('shortcutColDesc')">
+              <template #default="scope">{{ t(scope.row.descKey) }}</template>
+            </el-table-column>
+          </el-table>
+        </el-dialog>
         <!--eldialog 询问用户是否立即重启-->
         <el-dialog append-to-body
           :title="t('restartConfirm')"
@@ -13372,12 +13446,6 @@ function updateElement(el, rawMarkdown, formatFn) {
                                     @change="autoSaveSettings"
                                   ></el-switch>
                                 </el-form-item>
-                                <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                  <el-switch
-                                    v-model="qqBotConfig.quickRestart"
-                                    @change="autoSaveSettings"
-                                  ></el-switch>
-                                </el-form-item>
                                 <el-form-item label="APP ID" required>
                                     <el-input @change="autoSaveSettings" v-model="qqBotConfig.appid" :placeholder="t('enter_qq_bot_app_id')" class="full-width-input"></el-input>
                                 </el-form-item>
@@ -13541,14 +13609,10 @@ function updateElement(el, rawMarkdown, formatFn) {
                               </el-form-item>
 
                               <el-form-item :label="t('reasoningVisibleEnable')" class="form-item-align" label-position="left">
-                                <el-switch v-model="wechatBotConfig.reasoningVisible" @change="autoSaveSettings"></el-switch>
-                              </el-form-item>
+                                 <el-switch v-model="wechatBotConfig.reasoningVisible" @change="autoSaveSettings"></el-switch>
+                               </el-form-item>
 
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch v-model="wechatBotConfig.quickRestart" @change="autoSaveSettings"></el-switch>
-                              </el-form-item>
-
-                              <!-- 启用TTS -->
+                               <!-- 启用TTS -->
                               <el-form-item :label="t('enableTTS')" class="form-item-align" label-position="left">
                                 <el-switch
                                   v-model="wechatBotConfig.enableTTS"
@@ -13764,13 +13828,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 ></el-switch>
                               </el-form-item>
 
-                              <!-- 快速重启 -->
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch
-                                  v-model="feishuBotConfig.quickRestart"
-                                  @change="autoSaveSettings"
-                                ></el-switch>
-                              </el-form-item>
+                              <!-- 快速重启已统一至系统设置 -->
 
                               <!-- 启用TTS -->
                               <el-form-item :label="t('enableTTS')" class="form-item-align" label-position="left">
@@ -13933,10 +13991,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 <el-switch v-model="weComBotConfig.reasoningVisible" @change="autoSaveSettings"></el-switch>
                               </el-form-item>
 
-                              <!-- 快速重启 -->
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch v-model="weComBotConfig.quickRestart" @change="autoSaveSettings"></el-switch>
-                              </el-form-item>
+                              <!-- 快速重启已统一至系统设置 -->
 
                               <!-- 启用TTS -->
                               <!-- <el-form-item :label="t('enableTTS')" class="form-item-align" label-position="left">
@@ -14103,9 +14158,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 <el-switch v-model="dingtalkBotConfig.reasoningVisible" @change="autoSaveSettings"></el-switch>
                               </el-form-item>
 
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch v-model="dingtalkBotConfig.quickRestart" @change="autoSaveSettings"></el-switch>
-                              </el-form-item>
+                              <!-- 快速重启已统一至系统设置 -->
 
 
                               <el-form-item :label="t('wakeWord')">
@@ -14320,13 +14373,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 ></el-switch>
                               </el-form-item>
 
-                              <!-- 快速重启 -->
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch
-                                  v-model="telegramBotConfig.quickRestart"
-                                  @change="autoSaveSettings"
-                                ></el-switch>
-                              </el-form-item>
+                              <!-- 快速重启已统一至系统设置 -->
 
                               <!-- 启用 TTS -->
                               <el-form-item :label="t('enableTTS')" class="form-item-align" label-position="left">
@@ -14523,10 +14570,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 <el-switch v-model="discordBotConfig.reasoning_visible" @change="autoSaveSettings"></el-switch>
                               </el-form-item>
 
-                              <!-- 快速重启 -->
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch v-model="discordBotConfig.quick_restart" @change="autoSaveSettings"></el-switch>
-                              </el-form-item>
+                              <!-- 快速重启已统一至系统设置 -->
 
                               <!-- 启用 TTS -->
                               <el-form-item :label="t('enableTTS')" class="form-item-align" label-position="left">
@@ -14716,10 +14760,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 <el-switch v-model="slackBotConfig.reasoning_visible" @change="autoSaveSettings"></el-switch>
                               </el-form-item>
 
-                              <!-- 快速重启 -->
-                              <el-form-item :label="t('quickRestartEnable')" class="form-item-align" label-position="left">
-                                <el-switch v-model="slackBotConfig.quick_restart" @change="autoSaveSettings"></el-switch>
-                              </el-form-item>
+                              <!-- 快速重启已统一至系统设置 -->
 
                               <!-- 启用 TTS -->
                               <el-form-item :label="t('enableTTS')" class="form-item-align" label-position="left">
@@ -17916,6 +17957,9 @@ function updateElement(el, rawMarkdown, formatFn) {
                       <!-- ✨✨✨ 新增：统一的外层包裹器 ✨✨✨ -->
                       <!-- tabindex="-1" 是为了让 focus-within 生效更稳定 -->
                       <div class="unified-input-wrapper">
+                        <transition name="shortcut-menu">
+                          <shortcut-menu v-if="shortcutMenuOpen" :items="shortcutMenuItems" :index="shortcutMenuIndex" @select="selectShortcutMenuItem" @hover="i => shortcutMenuIndex = i"></shortcut-menu>
+                        </transition>
                         <!-- 按钮组 -->
                         <div class="button-group">
                             

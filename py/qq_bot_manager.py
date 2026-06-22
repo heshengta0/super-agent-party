@@ -225,21 +225,39 @@ class MyClient(botpy.Client):
         if not self.is_running: return
         c_id = message.author.user_openid
         
-        # 1. 检查并处理快捷指令（打断逻辑）
-        if self.quickRestart:
+        # 1. 检查并处理快捷指令（统一快捷指令，受系统设置全局开关控制）
+        from py import shortcut_commands
+        if await shortcut_commands.im_shortcuts_enabled():
             content_clean = message.content.strip()
-            # 停止逻辑：直接取消任务，不启动新任务
-            if content_clean in ["/停止", "/stop"]:
+            action = shortcut_commands.parse_im_action(content_clean)
+            if action == "stop":
                 if c_id in self.active_tasks:
                     self.active_tasks[c_id].cancel()
-                    await self._send_text_message(message, "已停止当前输出。")
+                    await self._send_text_message(message, shortcut_commands.STOP_MSG_ZH)
                 return
-            # 重启逻辑：取消任务并清空记忆
-            if content_clean in ["/重启", "/restart"]:
+            if action == "reset":
                 if c_id in self.active_tasks:
                     self.active_tasks[c_id].cancel()
                 self.memoryList[c_id] = []
-                await self._send_text_message(message, "对话记录已重置。")
+                await self._send_text_message(message, shortcut_commands.RESET_MSG_ZH)
+                return
+            if action == "help":
+                await self._send_text_message(message, shortcut_commands.build_help_text("zh"))
+                return
+            if action == "skills":
+                await self._send_text_message(message, await shortcut_commands.build_skills_text("zh"))
+                return
+            if action == "model":
+                await self._send_text_message(message, await shortcut_commands.handle_model_command(content_clean, "zh"))
+                return
+            if action == "personality":
+                await self._send_text_message(message, await shortcut_commands.handle_personality_command(content_clean, "zh"))
+                return
+            if action == "retry":
+                await self._send_text_message(message, shortcut_commands.retry_hint("zh"))
+                return
+            if action == "mode":
+                await self._send_text_message(message, await shortcut_commands.build_mode_info_text("zh"))
                 return
 
         # 2. 如果当前用户有任务在跑，直接打断
@@ -380,24 +398,42 @@ class MyClient(botpy.Client):
         if not self.is_running: return
         g_id = message.group_openid
         
-        # 指令检查
-        if self.quickRestart:
+        # 指令检查（统一快捷指令，受系统设置全局开关控制）
+        from py import shortcut_commands
+        if await shortcut_commands.im_shortcuts_enabled():
             content_clean = message.content.strip()
-            if content_clean in ["/停止", "/stop"]:
+            action = shortcut_commands.parse_im_action(content_clean)
+            if action in ("stop", "reset", "help"):
+                if not hasattr(self, 'group_states'): self.group_states = {}
+                self.group_states.setdefault(g_id, {"msg_seq": 1})
+            if action == "stop":
                 if g_id in self.active_tasks:
                     self.active_tasks[g_id].cancel()
-                    # 群聊中状态初始化以便发送停止消息
-                    if not hasattr(self, 'group_states'): self.group_states = {}
-                    self.group_states.setdefault(g_id, {"msg_seq": 1})
-                    await self._send_group_text(message, "已停止当前输出。", self.group_states[g_id])
+                    await self._send_group_text(message, shortcut_commands.STOP_MSG_ZH, self.group_states[g_id])
                 return
-            if content_clean in ["/重启", "/restart"]:
+            if action == "reset":
                 if g_id in self.active_tasks:
                     self.active_tasks[g_id].cancel()
                 self.memoryList[g_id] = []
-                if not hasattr(self, 'group_states'): self.group_states = {}
-                self.group_states.setdefault(g_id, {"msg_seq": 1})
-                await self._send_group_text(message, "对话记录已重置。", self.group_states[g_id])
+                await self._send_group_text(message, shortcut_commands.RESET_MSG_ZH, self.group_states[g_id])
+                return
+            if action == "help":
+                await self._send_group_text(message, shortcut_commands.build_help_text("zh"), self.group_states[g_id])
+                return
+            if action == "skills":
+                await self._send_group_text(message, await shortcut_commands.build_skills_text("zh"), self.group_states[g_id])
+                return
+            if action == "model":
+                await self._send_group_text(message, await shortcut_commands.handle_model_command(content_clean, "zh"), self.group_states[g_id])
+                return
+            if action == "personality":
+                await self._send_group_text(message, await shortcut_commands.handle_personality_command(content_clean, "zh"), self.group_states[g_id])
+                return
+            if action == "retry":
+                await self._send_group_text(message, shortcut_commands.retry_hint("zh"), self.group_states[g_id])
+                return
+            if action == "mode":
+                await self._send_group_text(message, await shortcut_commands.build_mode_info_text("zh"), self.group_states[g_id])
                 return
 
         # 打断旧任务

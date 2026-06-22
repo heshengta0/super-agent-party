@@ -203,22 +203,41 @@ class WeComClient:
         chat_id = body.get('chatid', body.get('from', {}).get('userid', ''))
         global_behavior_engine.report_activity("wecom", chat_id)
         
-        # 1. 快捷指令与打断检查
-        if self.quickRestart and msg_type == "text":
+        # 1. 快捷指令与打断检查（统一快捷指令，受系统设置全局开关控制）
+        if msg_type == "text":
+            from py import shortcut_commands
             user_text = body.get('text', {}).get('content', '').strip()
-            # 停止逻辑
-            if user_text in ["/停止", "/stop"]:
-                if chat_id in self.active_tasks:
-                    self.active_tasks[chat_id].cancel()
-                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), "已停止当前输出。", True)
-                return
-            # 重启逻辑
-            if user_text in ["/重启", "/restart"]:
-                if chat_id in self.active_tasks:
-                    self.active_tasks[chat_id].cancel()
-                self.memoryList[chat_id] = []
-                await self.ws_client.reply_stream(frame, generate_req_id('stream'), "对话记录已重置。", True)
-                return
+            if await shortcut_commands.im_shortcuts_enabled():
+                action = shortcut_commands.parse_im_action(user_text)
+                if action == "stop":
+                    if chat_id in self.active_tasks:
+                        self.active_tasks[chat_id].cancel()
+                        await self.ws_client.reply_stream(frame, generate_req_id('stream'), shortcut_commands.STOP_MSG_ZH, True)
+                    return
+                if action == "reset":
+                    if chat_id in self.active_tasks:
+                        self.active_tasks[chat_id].cancel()
+                    self.memoryList[chat_id] = []
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), shortcut_commands.RESET_MSG_ZH, True)
+                    return
+                if action == "help":
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), shortcut_commands.build_help_text("zh"), True)
+                    return
+                if action == "skills":
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), await shortcut_commands.build_skills_text("zh"), True)
+                    return
+                if action == "model":
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), await shortcut_commands.handle_model_command(user_text, "zh"), True)
+                    return
+                if action == "personality":
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), await shortcut_commands.handle_personality_command(user_text, "zh"), True)
+                    return
+                if action == "retry":
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), shortcut_commands.retry_hint("zh"), True)
+                    return
+                if action == "mode":
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), await shortcut_commands.build_mode_info_text("zh"), True)
+                    return
 
         # 2. 如果当前有正在处理的任务，则打断它
         if chat_id in self.active_tasks:
@@ -253,6 +272,13 @@ class WeComClient:
             user_text = body.get('text', {}).get('content', '')
             if "/id" in user_text.lower():
                 await self.ws_client.reply_stream(frame, generate_req_id('stream'), f"ID: `{chat_id}`", True)
+                return
+            from py import shortcut_commands as _sc
+            _sub = _sc.parse_subscribe_action(user_text)
+            if _sub:
+                _reply = await _sc.handle_subscribe_command("wecom", chat_id, _sub == "sub", "zh")
+                if _reply:
+                    await self.ws_client.reply_stream(frame, generate_req_id('stream'), _reply, True)
                 return
             if self.wakeWord and self.wakeWord not in user_text: return
 

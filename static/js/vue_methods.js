@@ -2366,6 +2366,19 @@ formatMessage(content, index) {
       if (event?.repeat) return; 
       if (event.isComposing || event.keyCode === 229) return;
 
+      // ===== 快捷指令弹出菜单导航（优先处理）=====
+      if (this.shortcutMenuOpen && this.shortcutMenuItems.length) {
+        if (event.key === 'ArrowDown') { event.preventDefault(); this.moveShortcutMenu(1); return; }
+        if (event.key === 'ArrowUp') { event.preventDefault(); this.moveShortcutMenu(-1); return; }
+        if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+          event.preventDefault();
+          const item = this.shortcutMenuItems[this.shortcutMenuIndex] || this.shortcutMenuItems[0];
+          if (item) this.selectShortcutMenuItem(item);
+          return;
+        }
+        if (event.key === 'Escape') { event.preventDefault(); this.closeShortcutMenu(); return; }
+      }
+
       // ====== 局部模式 (按住说话) ======
       if (this.asrSettings.interactionMethod === "keyTriggered") {
         // 如果按下的键和设置的键严格匹配 (例如 'Alt' === 'Alt')
@@ -2527,10 +2540,146 @@ formatMessage(content, index) {
     // ==========================================
     // 1. 用户动作入口与调度函数（可直接替换）
     // ==========================================
+    // 统一快捷指令分发：命中控制类指令则就地处理并返回 true，否则返回 false 继续正常发送
+    // 快捷指令弹出菜单：输入变化时刷新可见性
+    refreshShortcutMenu() {
+      const items = this.shortcutMenuItems;
+      this.shortcutMenuOpen = (this.shortcutMenuToken !== null) && items.length > 0;
+      if (this.shortcutMenuIndex >= items.length) this.shortcutMenuIndex = 0;
+    },
+    moveShortcutMenu(delta) {
+      const n = this.shortcutMenuItems.length;
+      if (!n) return;
+      this.shortcutMenuIndex = (this.shortcutMenuIndex + delta + n) % n;
+    },
+    closeShortcutMenu() {
+      this.shortcutMenuOpen = false;
+      this.shortcutMenuIndex = 0;
+    },
+    selectShortcutMenuItem(item) {
+      if (!item) return;
+      if (item.mode === 'fill') {
+        // 需要参数的指令 / 技能：填入并保留焦点，等待用户输入内容后回车
+        this.userInput = item.insert + ' ';
+        this.shortcutMenuOpen = false;
+        this.shortcutMenuIndex = 0;
+      } else {
+        // 无参数指令：直接执行
+        this.closeShortcutMenu();
+        this.handleShortcutCommand(item.insert);
+        this.userInput = '';
+      }
+    },
+    handleShortcutCommand(raw) {
+        if (!raw || raw[0] !== '/') return false;
+        const parts = raw.slice(1).split(/\s+/);
+        if (!parts[0]) return false;
+        const cmd = ('/' + parts[0]).toLowerCase();
+        const arg = raw.slice(1 + parts[0].length).trim();
+        const inAny = (list) => list.includes(cmd);
+        try {
+            if (inAny(['/help', '/帮助', '/?'])) { this.showShortcutHelp = true; return true; }
+            if (inAny(['/stop', '/停止'])) { this.stopGenerate(); return true; }
+            if (inAny(['/new', '/reset', '/restart', '/重启', '/新建'])) { this.clearMessages(); return true; }
+            if (inAny(['/retry', '/重试'])) { this.shortcutRetry(); return true; }
+            if (inAny(['/model', '/模型'])) { this.shortcutSwitchModel(arg); return true; }
+            if (inAny(['/personality', '/persona', '/角色'])) { this.shortcutSwitchPersonality(arg); return true; }
+            if (inAny(['/skills', '/技能'])) { this.shortcutShowSkills(); return true; }
+            const modeMap = {'/plan':'plan','/计划':'plan','/read':'default','/只读':'default','/edit':'auto-approve','/编辑':'auto-approve','/yolo':'yolo','/cowork':'cowork','/协作':'cowork','/goal':'goal','/目标':'goal'};
+            if (modeMap[cmd]) { this.shortcutSwitchMode(modeMap[cmd]); return true; }
+        } catch (e) {
+            console.error('快捷指令处理异常:', e);
+            return true;
+        }
+        // 其它 /<技能名> 注入及 # / @ 指令交由后端 / 正常流程处理
+        return false;
+    },
+    // /retry：重新生成最后一条助手回复
+    shortcutRetry() {
+        let idx = -1;
+        for (let i = this.messages.length - 1; i >= 0; i--) {
+            if (this.messages[i].role === 'assistant') { idx = i; break; }
+        }
+        if (idx > 0) { this.rewrite(idx); }
+        else { showNotification(this.t('cmd_nothing_to_retry'), 'warning'); }
+    },
+    // /model：无参打开模型选择，有参尝试匹配并切换
+    shortcutSwitchModel(arg) {
+        if (!arg) { this.showModelDialog = true; return; }
+        const q = arg.toLowerCase().trim();
+        let target = null;
+        for (const p of (this.modelProviders || [])) {
+            const vendor = (p.vendor || p.name || '').toLowerCase();
+            const model = (p.modelId || '').toLowerCase();
+            if (model === q || vendor === q || (vendor + ':' + model) === q ||
+                (model && model.includes(q)) || (vendor && vendor.includes(q))) {
+                target = p; break;
+            }
+        }
+        if (target) {
+            this.selectMainProvider(target.id);
+            showNotification(this.t('cmd_model_switched') + ': ' + (target.modelId || target.vendor || ''), 'success');
+        } else {
+            this.showModelDialog = true;
+            showNotification(this.t('cmd_model_notfound'), 'warning');
+        }
+    },
+    // /personality：无参提示，有参匹配角色卡 / 系统提示词
+    shortcutSwitchPersonality(arg) {
+        if (!arg) {
+            this.activeMenu = 'role';
+            this.subMenu = 'memory';
+            showNotification(this.t('cmd_personality_hint'), 'info');
+            return;
+        }
+        const q = arg.toLowerCase().trim();
+        const mem = (this.memories || []).find(m => (m.name || '').toLowerCase() === q);
+        if (mem) {
+            this.memorySettings.is_memory = true;
+            this.memorySettings.selectedMemory = mem.id;
+            this.changeMemory();
+            showNotification(this.t('cmd_personality_switched') + ': ' + mem.name, 'success');
+            return;
+        }
+        const prompt = (this.SystemPromptsList || []).find(p => (p.name || '').toLowerCase() === q);
+        if (prompt) {
+            this.usePrompt(prompt);
+            showNotification(this.t('cmd_personality_switched') + ': ' + prompt.name, 'success');
+            return;
+        }
+        showNotification(this.t('cmd_personality_notfound'), 'warning');
+    },
+    // /skills：跳转到技能管理
+    shortcutShowSkills() {
+        this.activeMenu = 'toolkit';
+        this.subMenu = 'CLI';
+        this.activeCLITab = 'skills';
+    },
+    // /plan /read /edit /yolo /cowork /goal：切换当前引擎的权限模式（需开启电脑命令行控制）
+    shortcutSwitchMode(modeValue) {
+        if (!this.CLISettings || !this.CLISettings.enabled) {
+            showNotification(this.t('cmd_mode_need_cli'), 'warning');
+            return;
+        }
+        const engine = this.CLISettings.engine;
+        const key = engine === 'ds' ? 'dsSettings' : engine === 'acp' ? 'acpSettings' : 'localEnvSettings';
+        if (!this[key]) this[key] = {};
+        this[key].permissionMode = modeValue;
+        this.autoSaveSettings();
+        showNotification(this.t('cmd_mode_switched') + ': ' + modeValue, 'success');
+    },
     async sendMessage(role = 'user') { 
         // 基础校验
         if (!this.userInput.trim() && (!this.files || this.files.length === 0) && (!this.images || this.images.length === 0)) return;
         if (this.isTyping) return;
+        this.closeShortcutMenu();
+        // 统一快捷指令拦截（仅处理聊天界面的控制类指令；技能注入 / #记忆 / @文件 仍走正常流程）
+        if (this.systemSettings.enableShortcuts && role === 'user'
+            && (!this.files || this.files.length === 0) && (!this.images || this.images.length === 0)
+            && this.handleShortcutCommand(this.userInput.trim())) {
+            this.userInput = '';
+            return;
+        }
         if (this.CLISettings.enabled) {
             const pathToCheck = this.CLISettings.cc_path;
 

@@ -167,22 +167,41 @@ class DingtalkClientLogic:
                          user_text = item['text'].strip()
                          break
 
-        # 2. 快捷指令与任务打断逻辑
-        if self.config.quickRestart and user_text:
+        # 2. 快捷指令与任务打断逻辑（统一快捷指令，受系统设置全局开关控制）
+        if user_text:
+            from py import shortcut_commands
             content_clean = user_text.strip()
-            # 停止逻辑
-            if content_clean in ["/停止", "/stop"]:
-                if cid in self.active_tasks:
-                    self.active_tasks[cid].cancel()
-                    handler.reply_text("已停止当前输出。", incoming_message)
-                return
-            # 重启逻辑
-            if content_clean in ["/重启", "/restart"]:
-                if cid in self.active_tasks:
-                    self.active_tasks[cid].cancel()
-                self.memoryList[cid] = []
-                handler.reply_text("对话记录已重置。", incoming_message)
-                return
+            if await shortcut_commands.im_shortcuts_enabled():
+                action = shortcut_commands.parse_im_action(content_clean)
+                if action == "stop":
+                    if cid in self.active_tasks:
+                        self.active_tasks[cid].cancel()
+                        handler.reply_text(shortcut_commands.STOP_MSG_ZH, incoming_message)
+                    return
+                if action == "reset":
+                    if cid in self.active_tasks:
+                        self.active_tasks[cid].cancel()
+                    self.memoryList[cid] = []
+                    handler.reply_text(shortcut_commands.RESET_MSG_ZH, incoming_message)
+                    return
+                if action == "help":
+                    handler.reply_text(shortcut_commands.build_help_text("zh"), incoming_message)
+                    return
+                if action == "skills":
+                    handler.reply_text(await shortcut_commands.build_skills_text("zh"), incoming_message)
+                    return
+                if action == "model":
+                    handler.reply_text(await shortcut_commands.handle_model_command(content_clean, "zh"), incoming_message)
+                    return
+                if action == "personality":
+                    handler.reply_text(await shortcut_commands.handle_personality_command(content_clean, "zh"), incoming_message)
+                    return
+                if action == "retry":
+                    handler.reply_text(shortcut_commands.retry_hint("zh"), incoming_message)
+                    return
+                if action == "mode":
+                    handler.reply_text(await shortcut_commands.build_mode_info_text("zh"), incoming_message)
+                    return
 
         # 3. 如果当前会话有任务在跑，直接打断
         if cid in self.active_tasks:
@@ -241,6 +260,14 @@ class DingtalkClientLogic:
             final_id = raw_data.get("senderStaffId") or incoming_message.sender_id
             msg = f"【会话信息】\nID: `{cid}`\n用户ID: `{final_id}`" if cid.startswith("cid") else f"【个人信息】\nUserID: `{final_id}`"
             handler.reply_markdown("ID 助手", msg, incoming_message)
+            return
+
+        from py import shortcut_commands as _sc
+        _sub = _sc.parse_subscribe_action(user_text)
+        if _sub:
+            _reply = await _sc.handle_subscribe_command("dingtalk", cid, _sub == "sub", "zh")
+            if _reply:
+                handler.reply_text(_reply, incoming_message)
             return
 
         if self.config.wakeWord and self.config.wakeWord not in user_text and not has_image: return
