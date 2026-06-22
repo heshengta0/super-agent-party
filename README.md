@@ -282,6 +282,32 @@ Added a brand-new extension system. You can check available plugins at [plugins 
   }
   ```
 
+- Shortcut commands: In the chat box or any connected IM platform (Feishu, QQ, Telegram, Discord, Slack, WeChat, WeCom, DingTalk), type the commands below to quickly control the assistant. You can toggle them and view the full list in **System Settings → Shortcut Commands**.
+
+  | Command | Aliases | Scope | Description |
+  | --- | --- | --- | --- |
+  | `/help` | `/帮助` `/?` | Chat + IM | List all available shortcut commands |
+  | `/new` | `/reset` `/重启` `/新建` `/restart` | Chat + IM | Clear the current conversation and start fresh |
+  | `/stop` | `/停止` | Chat + IM | Stop the response currently being generated |
+  | `/retry` | `/重试` | Chat only | Regenerate the last reply |
+  | `/model [provider:model]` | `/模型` | Chat + IM | Show or switch the model (IM shows only) |
+  | `/personality [name]` | `/角色` `/persona` | Chat + IM | Show or switch the personality |
+  | `/skills` | `/技能` | Chat + IM | Browse the list of available skills |
+  | `/id` | - | IM only | Show the current session/channel ChatID |
+  | `/sub` | `/订阅` | IM only | Add the current session to the proactive message list |
+  | `/unsub` | `/取消订阅` | IM only | Remove the current session from the proactive message list |
+  | `/plan` * | `/计划` | Chat + IM | Switch to plan mode (read-only) |
+  | `/read` * | `/只读` | Chat + IM | Switch to read-only mode (confirm each action) |
+  | `/edit` * | `/编辑` | Chat + IM | Switch to accept-edits mode |
+  | `/yolo` * | - | Chat + IM | Switch to Yolo mode (full autonomy) |
+  | `/cowork` * | `/协作` | Chat + IM | Switch to cowork mode (sub-agent collaboration) |
+  | `/goal` * | `/目标` | Chat + IM | Switch to goal mode (autonomous loop) |
+  | `/<skill-name>` * | - | Chat + IM | Inject the specified skill |
+  | `#<text>` * | - | Chat + IM | Save workspace memory |
+  | `@<path>` * | - | Chat only | Reference a workspace file |
+
+  > `*` Requires computer CLI control to be enabled; skill injection, `#` memory and `@` file reference also require a configured workspace.
+
 ## Features
 
 Please refer to the following document for the main functions:
