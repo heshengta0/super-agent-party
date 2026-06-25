@@ -441,7 +441,7 @@ import argparse
 from py.dify_openai import DifyOpenAIAsync
 from py.ClaudeAsOpenAI import AsyncClaudeAsOpenAI
 from py.GeminiAsOpenAI import AsyncGeminiAsOpenAI
-from py.get_setting import EXT_DIR, IS_DOCKER, SKILLS_DIR, _copy_default_skills, convert_to_opus_simple, load_covs, load_settings, save_covs,save_settings,clean_temp_files_task,base_path,configure_host_port,UPLOAD_FILES_DIR,AGENT_DIR,MEMORY_CACHE_DIR,KB_DIR,DEFAULT_VRM_DIR,DEFAULT_THA_DIR,THA_USER_MODELS_DIR,USER_DATA_DIR,LOG_DIR,TOOL_TEMP_DIR,COVS_PATH,DATABASE_PATH
+from py.get_setting import EXT_DIR, IS_DOCKER, SKILLS_DIR, _copy_default_skills, convert_to_opus_simple, load_covs, load_settings, save_covs, save_single_cov, save_settings,clean_temp_files_task,base_path,configure_host_port,UPLOAD_FILES_DIR,AGENT_DIR,MEMORY_CACHE_DIR,KB_DIR,DEFAULT_VRM_DIR,DEFAULT_THA_DIR,THA_USER_MODELS_DIR,USER_DATA_DIR,LOG_DIR,TOOL_TEMP_DIR,COVS_PATH,DATABASE_PATH
 from py.llm_tool import get_image_base64,get_image_media_type
 timetamp = time.time()
 log_path = os.path.join(LOG_DIR, f"backend_{timetamp}.log")
@@ -847,7 +847,7 @@ async def lifespan(app: FastAPI):
             os.environ["UV_INDEX_URL"] = "https://mirrors.aliyun.com/pypi/simple/"
 
     # 初始化全局带连接池的 HTTP 客户端
-    timeout_config = httpx.Timeout(None, connect=10.0)
+    timeout_config = httpx.Timeout(60.0, connect=10.0)
     global_http_client = httpx.AsyncClient(
         timeout=timeout_config,
         proxy=proxy_url,
@@ -857,17 +857,57 @@ async def lifespan(app: FastAPI):
     # --- [模型 Client 初始化] ---
     # 辅助函数：统一注入 global_http_client
     def create_model_client(provider_key, config_node=None):
-        if not settings: return AsyncOpenAI(http_client=global_http_client)
-        
+        if not settings:
+            fallback = AsyncOpenAI(http_client=global_http_client)
+            _wrap_client_chat_with_retry(fallback)
+            return fallback
+
         target_cfg = config_node if config_node else settings
         p_name = target_cfg.get('selectedProvider', settings.get('selectedProvider'))
         c_cls = get_client_class(settings, p_name)
-        
-        return c_cls(
+
+        raw_client = c_cls(
             api_key=target_cfg.get('api_key') or settings.get('api_key', ''),
             base_url=target_cfg.get('base_url') or settings.get('base_url') or "https://api.openai.com/v1",
             http_client=global_http_client  # 强制使用我们定义的带代理控制的客户端
         )
+        _wrap_client_chat_with_retry(raw_client)
+        return raw_client
+
+    def _wrap_client_chat_with_retry(client, max_retries=3, base_delay=1.0):
+        RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+        RETRYABLE_EXCEPTIONS = (
+            httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout,
+            httpx.ConnectTimeout, httpx.RemoteProtocolError, httpx.WriteError,
+            httpx.PoolTimeout, httpx.NetworkError,
+            asyncio.TimeoutError, ConnectionError,
+        )
+
+        _original_create = client.chat.completions.create
+
+        async def _create_with_retry(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_retries + 1):
+                try:
+                    if attempt > 0:
+                        delay = base_delay * (2 ** (attempt - 1))
+                        print(f"[Retry] chat.completions.create 第 {attempt}/{max_retries} 次重试, 等待 {delay:.1f}s...")
+                        await asyncio.sleep(delay)
+                    return await _original_create(*args, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    if isinstance(e, httpx.HTTPStatusError):
+                        if e.response.status_code in RETRYABLE_STATUSES:
+                            print(f"[Retry] HTTP {e.response.status_code}, 将重试")
+                            continue
+                        raise
+                    if isinstance(e, RETRYABLE_EXCEPTIONS):
+                        print(f"[Retry] 网络错误 {type(e).__name__}: {e}, 将重试")
+                        continue
+                    raise
+            raise last_error
+
+        client.chat.completions.create = _create_with_retry
 
     if settings:
         client = create_model_client('main')
@@ -882,6 +922,9 @@ async def lifespan(app: FastAPI):
         client = AsyncOpenAI(http_client=global_http_client)
         reasoner_client = AsyncOpenAI(http_client=global_http_client)
         fast_client = AsyncOpenAI(http_client=global_http_client)
+        _wrap_client_chat_with_retry(client)
+        _wrap_client_chat_with_retry(reasoner_client)
+        _wrap_client_chat_with_retry(fast_client)
 
     # --- [其他初始化：ASR / MCP] ---
     try:
@@ -4793,7 +4836,14 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                                     res = f"{response_content.name}tool has been successfully launched. It will take some time to run, and the results will be provided in the next round of conversation."
                                     all_results_for_this_call.append(res)
                                 else:
-                                    res = await dispatch_tool(response_content.name, arg_item, settings, request.is_sub_agent)
+                                    _tool_task = asyncio.create_task(dispatch_tool(response_content.name, arg_item, settings, request.is_sub_agent))
+                                    while True:
+                                        _done, _ = await asyncio.wait([_tool_task], timeout=30)
+                                        if _tool_task in _done:
+                                            res = _tool_task.result()
+                                            break
+                                        _heartbeat = {"choices": [{"delta": {"tool_heartbeat": {"name": response_content.name}}}]}
+                                        yield f"data: {json.dumps(_heartbeat)}\n\n"
 
                                     if res is None:
                                         chunk = {
@@ -6897,7 +6947,8 @@ async def chat_endpoint(request: ChatRequest, fastapi_request: Request):
                         api_key=fast_cfg.get('api_key') or current_settings.get('api_key'),
                         base_url=fast_cfg.get('base_url') or current_settings.get('base_url') or "https://api.openai.com/v1"
                     )
-                
+                    _wrap_client_chat_with_retry(fast_client)
+
                 # 当前请求切花为快速 Client
                 active_client = fast_client
 
@@ -6917,6 +6968,7 @@ async def chat_endpoint(request: ChatRequest, fastapi_request: Request):
                 api_key=current_settings['api_key'],
                 base_url=current_settings['base_url'] or "https://api.openai.com/v1",
             )
+            _wrap_client_chat_with_retry(client)
             # 如果当前没有触发快速模型，需要确保 active_client 指向最新的主 client
             if active_client != fast_client:
                 active_client = client
@@ -6930,6 +6982,7 @@ async def chat_endpoint(request: ChatRequest, fastapi_request: Request):
                 api_key=current_settings['reasoner']['api_key'],
                 base_url=current_settings['reasoner']['base_url'] or "https://api.openai.com/v1",
             )
+            _wrap_client_chat_with_retry(reasoner_client)
 
         print('model:', request_settings['model'])
         
@@ -7073,12 +7126,14 @@ async def chat_endpoint(request: ChatRequest, fastapi_request: Request):
             api_key=agent_settings.get('api_key', ''),
             base_url=agent_settings.get('base_url') or "https://api.openai.com/v1"
         )
-        
+        _wrap_client_chat_with_retry(agent_client)
+
         ar_client_class = get_client_class(agent_settings, agent_settings.get('reasoner', {}).get('selectedProvider'))
         agent_reasoner_client = ar_client_class(
             api_key=agent_settings.get('reasoner', {}).get('api_key', ''),
             base_url=agent_settings.get('reasoner', {}).get('base_url') or "https://api.openai.com/v1"
         )
+        _wrap_client_chat_with_retry(agent_reasoner_client)
         
         try:
             if request.stream:
@@ -7133,6 +7188,7 @@ async def simple_chat_endpoint(request: ChatRequest):
             api_key=fast_cfg.get('api_key') or current_settings.get('api_key'),
             base_url=fast_cfg.get('base_url') or current_settings.get('base_url') or "https://api.openai.com/v1"
         )
+        _wrap_client_chat_with_retry(fast_client)
     
     # 使用 fast 配置覆盖当前配置
     if fast_cfg:
@@ -11609,6 +11665,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     "correlationId": data.get("correlationId"),
                     "success": True
                 }, websocket)
+
+            elif msg_type == "save_current_conversation":
+                conv_id = data.get("conversationId")
+                conv_data = data.get("conversation")
+                if conv_id and conv_data:
+                    try:
+                        await save_single_cov(conv_id, conv_data)
+                    except Exception as e:
+                        print(f"[save_current_conversation] 保存失败: {e}")
 
             elif msg_type == "get_settings":
                 settings = await load_settings()

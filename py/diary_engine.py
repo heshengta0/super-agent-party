@@ -94,7 +94,7 @@ class DiaryEngine:
         """热更新配置并重置下一次触发时间"""
         self.config = diary_settings or {}
         self._schedule_next()
-        logging.info(f"[DiaryEngine] 配置已更新, enabled={self.config.get('enabled', False)}")
+        logging.debug(f"[DiaryEngine] 配置已更新, enabled={self.config.get('enabled', False)}")
 
     def get_actions_that_need_tool(self):
         """返回需要自动开启工具的日记动作类型列表"""
@@ -124,7 +124,7 @@ class DiaryEngine:
         max_m = max(min_m, int(self.config.get("maxMinutes", 60) or 60))
         delay = random.randint(min_m, max_m) * 60
         self.next_run = time.time() + delay
-        logging.info(f"[DiaryEngine] 下一次日记触发约在 {delay // 60} 分钟后")
+        logging.debug(f"[DiaryEngine] 下一次日记触发约在 {delay // 60} 分钟后")
 
     def _in_quiet_window(self, dt) -> bool:
         """是否处于夜间静默时间段（默认 0-8 点，支持跨夜如 22-8）"""
