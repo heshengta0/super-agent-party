@@ -441,7 +441,7 @@ import argparse
 from py.dify_openai import DifyOpenAIAsync
 from py.ClaudeAsOpenAI import AsyncClaudeAsOpenAI
 from py.GeminiAsOpenAI import AsyncGeminiAsOpenAI
-from py.get_setting import EXT_DIR, IS_DOCKER, SKILLS_DIR, _copy_default_skills, convert_to_opus_simple, load_covs, load_settings, save_covs,save_settings,clean_temp_files_task,base_path,configure_host_port,UPLOAD_FILES_DIR,AGENT_DIR,MEMORY_CACHE_DIR,KB_DIR,DEFAULT_VRM_DIR,DEFAULT_THA_DIR,THA_USER_MODELS_DIR,USER_DATA_DIR,LOG_DIR,TOOL_TEMP_DIR,COVS_PATH,DATABASE_PATH
+from py.get_setting import EXT_DIR, IS_DOCKER, SKILLS_DIR, _copy_default_skills, convert_to_opus_simple, load_covs, load_settings, save_covs, save_single_cov, save_settings,clean_temp_files_task,base_path,configure_host_port,UPLOAD_FILES_DIR,AGENT_DIR,MEMORY_CACHE_DIR,KB_DIR,DEFAULT_VRM_DIR,DEFAULT_THA_DIR,THA_USER_MODELS_DIR,USER_DATA_DIR,LOG_DIR,TOOL_TEMP_DIR,COVS_PATH,DATABASE_PATH
 from py.llm_tool import get_image_base64,get_image_media_type
 timetamp = time.time()
 log_path = os.path.join(LOG_DIR, f"backend_{timetamp}.log")
@@ -4836,7 +4836,14 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                                     res = f"{response_content.name}tool has been successfully launched. It will take some time to run, and the results will be provided in the next round of conversation."
                                     all_results_for_this_call.append(res)
                                 else:
-                                    res = await dispatch_tool(response_content.name, arg_item, settings, request.is_sub_agent)
+                                    _tool_task = asyncio.create_task(dispatch_tool(response_content.name, arg_item, settings, request.is_sub_agent))
+                                    while True:
+                                        _done, _ = await asyncio.wait([_tool_task], timeout=30)
+                                        if _tool_task in _done:
+                                            res = _tool_task.result()
+                                            break
+                                        _heartbeat = {"choices": [{"delta": {"tool_heartbeat": {"name": response_content.name}}}]}
+                                        yield f"data: {json.dumps(_heartbeat)}\n\n"
 
                                     if res is None:
                                         chunk = {
@@ -11658,6 +11665,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     "correlationId": data.get("correlationId"),
                     "success": True
                 }, websocket)
+
+            elif msg_type == "save_current_conversation":
+                conv_id = data.get("conversationId")
+                conv_data = data.get("conversation")
+                if conv_id and conv_data:
+                    try:
+                        await save_single_cov(conv_id, conv_data)
+                    except Exception as e:
+                        print(f"[save_current_conversation] 保存失败: {e}")
 
             elif msg_type == "get_settings":
                 settings = await load_settings()

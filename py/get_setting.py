@@ -613,3 +613,15 @@ async def save_covs(settings):
     async with aiosqlite.connect(COVS_PATH) as db:
         await db.execute('INSERT OR REPLACE INTO settings (id, data) VALUES (1, ?)', (data,))
         await db.commit()
+
+async def save_single_cov(conv_id, conv_data):
+    covs = await load_covs()
+    found = False
+    for i, conv in enumerate(covs.get("conversations", [])):
+        if conv.get("id") == conv_id:
+            covs["conversations"][i] = conv_data
+            found = True
+            break
+    if not found:
+        covs.setdefault("conversations", []).append(conv_data)
+    await save_covs(covs)

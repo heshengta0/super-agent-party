@@ -2909,6 +2909,7 @@ formatMessage(content, index) {
     async generateAIResponse(targetAgentId, agentDisplayName = null, isResume = false) {
 
         const currentController = this.abortController;
+        let _saveInterval = null;
 
         if (!isResume && !this.ttsSettings.enabled && (this.vrmOnline || this.vtsOnline) && this.ttsWebSocket) {
             this.sendTTSStatusToVRM('ttsStarted', {});
@@ -3104,6 +3105,7 @@ formatMessage(content, index) {
         };
 
         try {
+            _saveInterval = setInterval(() => this.saveCurrentConversation(), 30000);
             const MAX_FETCH_RETRIES = 3;
             const RETRY_BASE_DELAY = 1000;
             let lastFetchError = null;
@@ -3575,6 +3577,7 @@ formatMessage(content, index) {
             }
             if (audioResolve) audioResolve();
         } finally {
+            clearInterval(_saveInterval);
             this.isSending = false;
             this.isTyping = false;
             this.voiceStack = ['default'];
@@ -4788,6 +4791,35 @@ formatMessage(content, index) {
         }, 10000);
         this.ws.addEventListener('message', handler);
       });
+    },
+
+    getSanitizedConversation(conv) {
+      return {
+        ...conv,
+        messages: conv.messages.map(msg => {
+          const {
+            audioChunks, omniAudioChunks, ttsQueue, isPlaying, cur_audioDatas, ...rest
+          } = msg;
+          return { ...rest, audioChunks: [], omniAudioChunks: [], currentChunk: 0, omniCurrentTime: 0, isPlaying: false };
+        })
+      };
+    },
+
+    saveCurrentConversation() {
+      if (!this.conversationId || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      try {
+        const conv = this.conversations.find(c => c.id === this.conversationId);
+        if (!conv) return;
+        const sanitized = this.getSanitizedConversation(conv);
+        const jsonStr = JSON.stringify({
+          type: 'save_current_conversation',
+          data: { conversationId: this.conversationId, conversation: sanitized },
+          correlationId: uuid.v4()
+        });
+        this.ws.send(jsonStr);
+      } catch (e) {
+        console.error("增量保存对话失败:", e);
+      }
     },
 
     // 修改后的fetchModels方法
