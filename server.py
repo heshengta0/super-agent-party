@@ -717,6 +717,42 @@ def get_client_class(config, provider_id):
         return AsyncOpenAI
 
 from py.node_runner import node_mgr
+
+def _wrap_client_chat_with_retry(client, max_retries=3, base_delay=1.0):
+    RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+    RETRYABLE_EXCEPTIONS = (
+        httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout,
+        httpx.ConnectTimeout, httpx.RemoteProtocolError, httpx.WriteError,
+        httpx.PoolTimeout, httpx.NetworkError,
+        asyncio.TimeoutError, ConnectionError,
+    )
+
+    _original_create = client.chat.completions.create
+
+    async def _create_with_retry(*args, **kwargs):
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    print(f"[Retry] chat.completions.create 第 {attempt}/{max_retries} 次重试, 等待 {delay:.1f}s...")
+                    await asyncio.sleep(delay)
+                return await _original_create(*args, **kwargs)
+            except Exception as e:
+                last_error = e
+                if isinstance(e, httpx.HTTPStatusError):
+                    if e.response.status_code in RETRYABLE_STATUSES:
+                        print(f"[Retry] HTTP {e.response.status_code}, 将重试")
+                        continue
+                    raise
+                if isinstance(e, RETRYABLE_EXCEPTIONS):
+                    print(f"[Retry] 网络错误 {type(e).__name__}: {e}, 将重试")
+                    continue
+                raise
+        raise last_error
+
+    client.chat.completions.create = _create_with_retry
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- [核心防御] 立即清理系统环境变量中的 SOCKS 代理，防止 httpx 崩溃 ---
@@ -873,41 +909,6 @@ async def lifespan(app: FastAPI):
         )
         _wrap_client_chat_with_retry(raw_client)
         return raw_client
-
-    def _wrap_client_chat_with_retry(client, max_retries=3, base_delay=1.0):
-        RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
-        RETRYABLE_EXCEPTIONS = (
-            httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout,
-            httpx.ConnectTimeout, httpx.RemoteProtocolError, httpx.WriteError,
-            httpx.PoolTimeout, httpx.NetworkError,
-            asyncio.TimeoutError, ConnectionError,
-        )
-
-        _original_create = client.chat.completions.create
-
-        async def _create_with_retry(*args, **kwargs):
-            last_error = None
-            for attempt in range(max_retries + 1):
-                try:
-                    if attempt > 0:
-                        delay = base_delay * (2 ** (attempt - 1))
-                        print(f"[Retry] chat.completions.create 第 {attempt}/{max_retries} 次重试, 等待 {delay:.1f}s...")
-                        await asyncio.sleep(delay)
-                    return await _original_create(*args, **kwargs)
-                except Exception as e:
-                    last_error = e
-                    if isinstance(e, httpx.HTTPStatusError):
-                        if e.response.status_code in RETRYABLE_STATUSES:
-                            print(f"[Retry] HTTP {e.response.status_code}, 将重试")
-                            continue
-                        raise
-                    if isinstance(e, RETRYABLE_EXCEPTIONS):
-                        print(f"[Retry] 网络错误 {type(e).__name__}: {e}, 将重试")
-                        continue
-                    raise
-            raise last_error
-
-        client.chat.completions.create = _create_with_retry
 
     if settings:
         client = create_model_client('main')
