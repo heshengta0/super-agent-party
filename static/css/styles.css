@@ -2844,6 +2844,73 @@ body {
     font-weight: bold; /* 加粗 */
     color: var(--el-text-color);
 }
+
+/* 推荐参数建议区块 */
+.suggested-params {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+.suggested-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.suggested-header i {
+  color: var(--el-color-warning);
+  font-size: 14px;
+}
+.suggested-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.suggested-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  background: var(--el-bg-color);
+  transition: all 0.2s ease;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.suggested-card:hover {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+[data-theme="dark"] .suggested-card:hover {
+  background: rgba(var(--el-color-primary-rgb, 64, 158, 255), 0.1);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+.suggested-name {
+  color: var(--el-color-primary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.suggested-name i {
+  margin-right: 4px;
+  font-size: 10px;
+}
+.suggested-type {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  padding: 1px 6px;
+  background: var(--el-fill-color);
+  border-radius: 3px;
+  font-family: monospace;
+}
+
 .message-actions {
   display: flex;
   justify-content: flex-end;

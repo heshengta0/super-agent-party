@@ -392,6 +392,37 @@ formatFileUrl(originalUrl) {
     },
 
 
+    // 从建议参数中添加
+    async addMainSuggestedParam(param) {
+      if (this.paramExistsInMain(param.name)) return;
+      this.settings.extra_params.push({
+        name: param.name,
+        type: param.type,
+        value: param.default !== undefined ? param.default : (param.type === 'boolean' ? false : (param.type === 'json' ? '{}' : (param.type === 'integer' || param.type === 'float' ? 0 : '')))
+      });
+      await this.autoSaveSettings();
+    },
+    async addFastSuggestedParam(param) {
+      if (this.paramExistsInFast(param.name)) return;
+      this.fastSettings.extra_params.push({
+        name: param.name,
+        type: param.type,
+        value: param.default !== undefined ? param.default : (param.type === 'boolean' ? false : (param.type === 'json' ? '{}' : (param.type === 'integer' || param.type === 'float' ? 0 : '')))
+      });
+      await this.autoSaveSettings();
+    },
+    paramExistsInMain(name) {
+      return this.settings.extra_params.some(p => p.name === name);
+    },
+    paramExistsInFast(name) {
+      return this.fastSettings.extra_params.some(p => p.name === name);
+    },
+    // 获取供应商名称（从 providerId 反查 vendor）
+    getVendorByProviderId(providerId) {
+      if (!providerId) return null;
+      const provider = this.modelProviders.find(p => p.id === providerId);
+      return provider ? provider.vendor : null;
+    },
     async removeParam(index) {
       this.settings.extra_params.splice(index, 1);
       await this.autoSaveSettings();

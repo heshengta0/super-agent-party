@@ -1345,6 +1345,31 @@ const app = Vue.createApp({
       }));
     },
 
+    // 当前主模型的供应商名称
+    mainVendorName() {
+      if (!this.settings.selectedProvider) return null;
+      const provider = this.modelProviders.find(p => p.id === this.settings.selectedProvider);
+      return provider ? provider.vendor : null;
+    },
+    // 当前快速应答模型的供应商名称
+    fastVendorName() {
+      if (!this.fastSettings.selectedProvider) return null;
+      const provider = this.modelProviders.find(p => p.id === this.fastSettings.selectedProvider);
+      return provider ? provider.vendor : null;
+    },
+    // 主模型推荐参数
+    mainSuggestedParams() {
+      const vendor = this.mainVendorName;
+      if (!vendor || !this.vendorSuggestedParams[vendor]) return [];
+      return this.vendorSuggestedParams[vendor].filter(p => !this.paramExistsInMain(p.name));
+    },
+    // 快速应答模型推荐参数
+    fastSuggestedParams() {
+      const vendor = this.fastVendorName;
+      if (!vendor || !this.vendorSuggestedParams[vendor]) return [];
+      return this.vendorSuggestedParams[vendor].filter(p => !this.paramExistsInFast(p.name));
+    },
+
     // ✨ 新增：主页面扩展列表过滤逻辑 ✨
     filteredManageExtensions() {
       if (!this.searchManageExtensionQuery) {
