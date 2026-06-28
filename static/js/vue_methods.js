@@ -11537,6 +11537,7 @@ processMarkdownStreamForTTS(message, deltaText, isFinal = false) {
 
   // ========== THA Desktop Pet Methods ==========
   async startTHA() {
+    if (this.isTHAStarting) return;
     if (this.isElectron) {
       this.THAConfig.name = 'default';
       await this.autoSaveSettings();
