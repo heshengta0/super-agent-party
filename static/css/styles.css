@@ -867,6 +867,7 @@ body {
 .el-menu-item {
   background-color: var(--el-bg-color-page)!important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 13px;
 }
 
 .el-menu-item:hover {
@@ -2966,6 +2967,7 @@ body {
 }
 
 .nav-text {
+  font-size: 13px;
   white-space: nowrap;
 }
 
