@@ -506,9 +506,8 @@
 
 /* 7. 选中状态优化 */
 [data-theme="rainbow"] .el-menu-item.is-active {
-  background: linear-gradient(90deg, rgba(122, 92, 192, 0.1), transparent) !important;
-  color: #7a5cc0 !important;
-  border-left: 3px solid #7a5cc0;
+  background: var(--el-color-primary-light-9) !important;
+  color: var(--el-color-primary) !important;
 }
 
 /* 8. 滚动条：细长的彩虹 */
@@ -868,11 +867,11 @@ body {
 .el-menu-item {
   background-color: var(--el-bg-color-page)!important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 13px;
 }
 
 .el-menu-item:hover {
   background: var(--el-menu-hover-bg-color) !important;
-  transform: translateX(4px);
 }
 
 /* 输入系统全局适配 */
@@ -2968,7 +2967,7 @@ body {
 }
 
 .nav-text {
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -5076,16 +5075,10 @@ body {
 }
 
 .el-menu-item.is-active {
-  background: linear-gradient(90deg, var(--el-color-primary-light-9), var(--el-bg-color)) !important;
+  background: var(--el-color-primary-light-9) !important;
   color: var(--el-color-primary) !important;
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--el-color-primary); /* 左侧指示条 */
-}
-
-/* 暗黑模式适配 */
-[data-theme="dark"] .el-menu-item.is-active,
-[data-theme="midnight"] .el-menu-item.is-active {
-  background: rgba(var(--el-color-primary-rgb), 0.15) !important;
+  font-weight: 500;
+  border-radius: 8px !important;
 }
 
 /* 聊天容器背景微纹理 (可选，增加质感) */
