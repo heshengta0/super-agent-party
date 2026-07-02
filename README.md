@@ -1,6 +1,6 @@
 ![image](static/source/coveren.png)
 
-<div align="center">
+<div align="center"> 
   <a href="./README_ZH.md">
     <img src="https://img.shields.io/badge/简体中文-自述文档-00B4AB?style=for-the-badge&logo=markdown"/>
   </a>
